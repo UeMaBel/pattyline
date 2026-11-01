@@ -1,0 +1,16 @@
+[build-system]
+requires = []
+build-backend = "build_backend"
+backend-path = ["."]
+
+[project]
+name = "pattyline"
+version = "0.1.0"
+description = "Human-approved local and cloud ticket orchestration"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [{name = "Pattyline contributors"}]
+
+[project.scripts]
+pattyline = "pattyline.cli:main"

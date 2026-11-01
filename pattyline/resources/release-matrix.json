@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "profiles": [
+    "windows-cloud-onboarding", "linux-cloud-onboarding",
+    "windows-local-onboarding", "linux-local-onboarding",
+    "windows-cloud-implementation", "linux-cloud-implementation",
+    "windows-local-implementation", "linux-local-implementation",
+    "windows-fresh-preparation", "linux-fresh-preparation",
+    "windows-permission-denials", "linux-permission-denials",
+    "windows-process-recovery", "linux-process-recovery",
+    "github-freshness-race", "github-interruption-reconciliation",
+    "windows-unattended-chain", "linux-unattended-chain",
+    "consumer-website", "consumer-second-project"
+  ],
+  "required_fields": ["profile", "timestamp", "os", "tool_versions", "models", "hardware", "permissions", "commands", "exit_status", "evidence_paths", "limitations", "outcome"],
+  "rule": "Every profile requires real host/runtime evidence. Missing, failed, fake or limited evidence blocks release."
+}
