@@ -106,8 +106,41 @@ def select(tickets, selection):
 
 
 def execute(args):
-    root = primary(args.project)
     command = args.command
+    if command == "setup":
+        settings_path = config.global_path()
+        root = settings_path.parent
+        created = not settings_path.exists()
+        values = config.initialize_global()
+        result = onboarding.inventory(values)
+        result["global_settings"] = {"path": str(settings_path), "status": "initialized" if created else "preserved"}
+        if args.install:
+            install_plan = onboarding.installation_plan(args.install, values, args.tool_version)
+            emit(install_plan)
+            if args.yes:
+                human()
+                result["installation"] = onboarding.install(root, install_plan, True)
+        if args.download_model:
+            emit(onboarding.model_plan(values, args.download_model))
+            if args.yes:
+                human()
+                result["model_download"] = onboarding.download_model(root, values, args.download_model, True)
+        if args.local:
+            result["local"] = onboarding.local_inventory(values)
+        if args.probe:
+            result["runtime_inventory"] = record_inventory(root, values)
+        if args.probe_worker:
+            emit({"live_probe": args.probe_worker, "maximum_seconds": 60, "token_limit_per_request": values["runtime"]["max_output_tokens"], "cost": "unknown; not a guaranteed monetary cap"})
+            confirm("Run real bounded model inference and container denial exercises?", args.yes)
+            from .runtime import adapter
+            runtime = adapter(root, values)
+            if not hasattr(runtime, "probe"):
+                raise Blocked("Selected runtime has no verified live-probe implementation")
+            route, stage = args.probe_worker.split(":")
+            result["live_probe"] = runtime.probe(route, stage)
+        return result
+
+    root = primary(args.project)
     if command == "init":
         choice = args.defaults
         if not (root / "pattyline.toml").exists() and config.global_path().exists() and choice is None:
@@ -145,34 +178,7 @@ def execute(args):
         return {"configuration": str(root / "pattyline.toml"), "status": "initialized; execution readiness not yet established",
                 "discovered_sources": source_candidates(root), "adoption": "Preview selected files with init --adopt PATH ...; additional project-relative paths are accepted",
                 "next": "pattyline setup; pattyline prepare FEATURE (new idea or refinement)"}
-    values = config.load(root) if (root / "pattyline.toml").exists() else config.DEFAULTS if command == "setup" else config.load(root)
-    if command == "setup":
-        result = onboarding.inventory(values)
-        if args.install:
-            install_plan = onboarding.installation_plan(args.install, values, args.tool_version)
-            emit(install_plan)
-            if args.yes:
-                human()
-                result["installation"] = onboarding.install(root, install_plan, True)
-        if args.download_model:
-            emit(onboarding.model_plan(values, args.download_model))
-            if args.yes:
-                human()
-                result["model_download"] = onboarding.download_model(root, values, args.download_model, True)
-        if args.local:
-            result["local"] = onboarding.local_inventory(values)
-        if args.probe:
-            result["runtime_inventory"] = record_inventory(root, values)
-        if args.probe_worker:
-            emit({"live_probe": args.probe_worker, "maximum_seconds": 60, "token_limit_per_request": values["runtime"]["max_output_tokens"], "cost": "unknown; not a guaranteed monetary cap"})
-            confirm("Run real bounded model inference and container denial exercises?", args.yes)
-            from .runtime import adapter
-            runtime = adapter(root, values)
-            if not hasattr(runtime, "probe"):
-                raise Blocked("Selected runtime has no verified live-probe implementation")
-            route, stage = args.probe_worker.split(":")
-            result["live_probe"] = runtime.probe(route, stage)
-        return result
+    values = config.load(root)
     if command == "config":
         if args.action == "save-global":
             if not args.keys or not set(args.keys) <= config.GLOBAL_KEYS:

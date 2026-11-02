@@ -44,11 +44,13 @@ For source development, run `python -m pattyline --help` from this checkout. Her
 
 ## Initialize your project
 
-Run Pattyline in the repository it should work on. Keep the installed executable on PATH, or use its absolute path after changing directories.
+`pattyline setup` is per-user and can run before you choose a project. It initializes global provider/model and execution defaults at `%APPDATA%/pattyline/config.toml` on Windows or `$XDG_CONFIG_HOME/pattyline/config.toml` on Linux (default `~/.config/pattyline/config.toml`). It preserves the file on later runs and does not read project configuration or create project files.
+
+Run project initialization in the repository Pattyline should work on. Keep the installed executable on PATH, or use its absolute path after changing directories.
 
 ```text
-cd /path/to/your/project
 pattyline setup
+cd /path/to/your/project
 pattyline init --defaults independent
 pattyline validate --scope config
 ```
