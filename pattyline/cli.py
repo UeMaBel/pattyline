@@ -121,6 +121,31 @@ def print_clean_report(result):
         print("\nRun `pattyline clean --apply --yes` to remove the listed Pattyline files and eligible worktrees.")
 
 
+def print_init_options(values):
+    runtime = values["runtime"]
+    limits = values["limits"]
+    print("\nPattyline project defaults")
+    print("  Cloud model:       " + (runtime.get("cloud_model") or "not selected"))
+    print("  Local model:       " + (runtime.get("local_model") or "not configured"))
+    print("  Execution:         " + runtime.get("adapter", "broker") + " on " + runtime.get("execution_platform", "linux"))
+    print("  Repair attempts:   " + str(limits.get("repairs", "not set")))
+    print("  Run time limit:    " + str(limits.get("run_seconds", "not set")) + " seconds")
+    print("  Network access:    " + ("enabled" if values["permissions"].get("network") else "disabled in worker tools"))
+
+
+def print_init_report(result):
+    if "configuration" not in result:
+        emit(result)
+        return
+    print("\nProject initialized")
+    print("  Local settings: " + result["configuration"])
+    print("  This file is pattyline.toml in the project root; edit it to change this project's parameters.")
+    print("  Project state:  .pattyline/ (ignored by Git)")
+    print("Global defaults are only a starting snapshot; project settings remain local.")
+    print("Run `pattyline validate --scope config` after editing to check the configuration.")
+    print("\nNext: " + result["next"])
+
+
 def human():
     if os.environ.get("PATTYLINE_WORKER") or os.environ.get("CODEX_THREAD_ID"):
         raise Blocked("Worker sessions cannot perform human approvals, installations or policy changes")
@@ -146,9 +171,8 @@ def select(tickets, selection):
     return list(dict.fromkeys(identities))
 
 
-def setup(args):
-    if not args.json:
-        print(r"""              .-=========-.
+def print_burgerpatty():
+    print(r"""              .-=========-.
              /  .  .  .  .  \
             /               \
            /=================\
@@ -158,6 +182,12 @@ def setup(args):
            /=================\
            |#################|
             \_______________/""")
+
+
+def setup(args):
+    if not args.json:
+        if getattr(args, "show_banner", True):
+            print_burgerpatty()
         print("Welcome to Pattyline! Setup is checking Git, GitHub CLI, Codex, and your Codex sign-in.")
         print("It will show any missing or outdated tools and guide you through the next steps.")
     settings_path = config.global_path()
@@ -246,14 +276,30 @@ def execute(args):
     if command == "setup":
         return setup(args)
 
+    setup_result = None
+    if command == "init" and not args.json:
+        print_burgerpatty()
+    if command == "init" and not config.global_path().exists():
+        # A missing per-user settings file means first-run setup has not been
+        # performed. Run the same inventory/login flow before project init.
+        setup_args = argparse.Namespace(json=args.json, yes=False, install=None, tool_version=None, show_banner=False)
+        setup_result = setup(setup_args)
+        if not args.json:
+            print_setup_report(setup_result)
+
     root = primary(args.project)
     if command == "init":
         choice = args.defaults
         if not (root / "pattyline.toml").exists() and config.global_path().exists() and choice is None:
-            emit({"global_defaults": tomllib.loads(config.global_path().read_text(encoding="utf-8")), "choices": ["global", "independent"], "customize": "--set KEY=JSON"})
+            global_values = config.merge(config.DEFAULTS, {key: value for key, value in
+                                            tomllib.loads(config.global_path().read_text(encoding="utf-8")).items()
+                                            if key in config.GLOBAL_KEYS})
+            if not args.json:
+                print_init_options(global_values)
             if not sys.stdin.isatty():
                 raise Blocked("Choose --defaults global or --defaults independent; global settings are snapshotted only with consent")
-            choice = input("Use global defaults or independent setup? [global/independent] ").strip()
+            choice = input("Use these global defaults for this project, or keep independent local defaults? [global/local] ").strip().lower()
+            choice = "independent" if choice == "local" else choice
             if choice not in {"global", "independent"}:
                 raise Blocked("Explicit defaults choice required")
         values = config.initialize(root, choice == "global")
@@ -281,9 +327,17 @@ def execute(args):
                 result = adopt(root, previews, args.specification, verification, args.scope, args.reconcile_history)
                 return {"adopted": result, "next": "Refine drafts, include their glob in config, validate and approve"}
             return {"result": "preview only; no ticket modified"}
-        return {"configuration": str(root / "pattyline.toml"), "status": "initialized; execution readiness not yet established",
-                "discovered_sources": source_candidates(root), "adoption": "Preview selected files with init --adopt PATH ...; additional project-relative paths are accepted",
-                "next": "pattyline setup; pattyline prepare FEATURE (new idea or refinement)"}
+        next_step = "pattyline prepare FEATURE (new idea or refinement)"
+        if setup_result is not None and not setup_result["readiness"]["ready"]:
+            next_step = "Complete the reported setup steps, then run pattyline setup before preparing a feature"
+        result = {"configuration": str(root / "pattyline.toml"), "status": "initialized; execution readiness not yet established",
+                  "discovered_sources": source_candidates(root), "adoption": "Preview selected files with init --adopt PATH ...; additional project-relative paths are accepted",
+                  "next": next_step}
+        if setup_result is not None:
+            result["setup"] = {"readiness": setup_result["readiness"], "global_settings": setup_result["global_settings"]}
+        if not args.json:
+            print_init_options(values)
+        return result
     values = config.load(root) if (root / "pattyline.toml").exists() else config.DEFAULTS
     if command == "config":
         if args.action == "save-global":
@@ -409,6 +463,8 @@ def main(argv=None):
             print_setup_report(result)
         elif args.command == "clean" and not args.json:
             print_clean_report(result)
+        elif args.command == "init" and not args.json:
+            print_init_report(result)
         else:
             emit(result)
         return 0

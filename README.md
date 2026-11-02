@@ -88,7 +88,7 @@ pattyline init --defaults independent
 pattyline validate --scope config
 ```
 
-`init` creates project-specific `pattyline.toml` and adds `.pattyline/` to `.gitignore`. Repeated initialization preserves settings. Project setup will determine whether GitHub authentication, local inference, or container tools are needed. For a new repository, initialize Git and create a first commit before execution; integration also needs a matching GitHub remote and base branch.
+`init` shows the important defaults and lets you choose whether to snapshot your global defaults or use independent local defaults. It creates project-specific `pattyline.toml` and adds `.pattyline/` to `.gitignore`; repeated initialization preserves settings. To change this project's parameters later, edit `pattyline.toml` and run `pattyline validate --scope config`. Global defaults are only copied at initialization, so later global changes do not overwrite project settings. Project setup will determine whether GitHub authentication, local inference, or container tools are needed. For a new repository, initialize Git and create a first commit before execution; integration also needs a matching GitHub remote and base branch.
 
 Global options go **before** the subcommand:
 
