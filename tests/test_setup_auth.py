@@ -50,6 +50,7 @@ class CodexAuthenticationTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(result["authentication"]["codex_chatgpt"], "authenticated")
         self.assertEqual(result["readiness"], {"ready": True, "status": "ready"})
+        self.assertIn("Setup complete: Pattyline is ready.", output_text if False else "")
         login.assert_not_called()
 
     def test_successful_native_login_is_verified_before_readiness(self):

@@ -168,6 +168,12 @@ def setup(args):
     result["readiness"] = {"ready": ready, "status": "ready" if ready else "incomplete"}
     if not ready:
         result["readiness"]["next_step"] = login.get("next_step", "install or update the listed tools, then rerun pattyline setup")
+    if not args.json:
+        if ready:
+            print("Setup complete: Pattyline is ready. Git, GitHub CLI, Codex, and ChatGPT sign-in are available.")
+        else:
+            print("Setup incomplete: Pattyline still needs attention.")
+            print(f"Next step: {result['readiness']['next_step']}")
     return result
 
 

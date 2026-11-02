@@ -41,6 +41,53 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     return target.name
 
 
+def get_requires_for_build_editable(config_settings=None):
+    """This dependency-free backend has no additional editable build requirements."""
+    return []
+
+
+def prepare_metadata_for_build_editable(metadata_directory, config_settings=None):
+    """Write the metadata directory required by PEP 660 editable installs."""
+    target = Path(metadata_directory) / INFO
+    target.mkdir(parents=True, exist_ok=True)
+    (target / "METADATA").write_bytes(metadata())
+    (target / "WHEEL").write_bytes(
+        b"Wheel-Version: 1.0\nGenerator: pattyline\nRoot-Is-Purelib: true\nTag: py3-none-any\n"
+    )
+    (target / "entry_points.txt").write_text(
+        "[console_scripts]\npattyline = pattyline.cli:main\n", encoding="utf-8"
+    )
+    return INFO
+
+
+def build_editable(wheel_directory, config_settings=None, metadata_directory=None):
+    """Build a small editable wheel that imports directly from this checkout."""
+    target = Path(wheel_directory) / f"{NAME}-py3-none-any.whl"
+    dist_info = f"{INFO}/"
+    files = {
+        f"{INFO}/METADATA": metadata(),
+        f"{INFO}/WHEEL": b"Wheel-Version: 1.0\nGenerator: pattyline\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        f"{INFO}/entry_points.txt": b"[console_scripts]\npattyline = pattyline.cli:main\n",
+    }
+    if metadata_directory:
+        metadata_path = Path(metadata_directory) / INFO
+        for name in ("METADATA", "WHEEL", "entry_points.txt"):
+            candidate = metadata_path / name
+            if candidate.is_file():
+                files[f"{INFO}/{name}"] = candidate.read_bytes()
+    files["pattyline.pth"] = f"{ROOT}\n".encode()
+    record = io.StringIO(newline="")
+    writer = csv.writer(record, lineterminator="\n")
+    with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as wheel:
+        for name, data in sorted(files.items()):
+            wheel.writestr(name, data)
+            digest = base64.urlsafe_b64encode(hashlib.sha256(data).digest()).rstrip(b"=").decode()
+            writer.writerow([name, f"sha256={digest}", len(data)])
+        writer.writerow([f"{INFO}/RECORD", "", ""])
+        wheel.writestr(f"{INFO}/RECORD", record.getvalue())
+    return target.name
+
+
 def build_sdist(sdist_directory, config_settings=None):
     target = Path(sdist_directory) / f"{NAME}.tar.gz"
     with tarfile.open(target, "w:gz") as archive:
