@@ -94,6 +94,46 @@ def tool_inventory(config, components=SHARED_COMPONENTS):
     return {"platform": platform.platform(), "tools": tools}
 
 
+def codex_auth_status(config):
+    """Ask Codex whether its own credential store has a ChatGPT session.
+
+    Never read Codex's credential/config files; their contents remain owned by Codex.
+    """
+    path = executable("codex", config["runtime"].get("codex"))
+    if not path:
+        return {"status": "codex-missing"}
+    try:
+        completed = subprocess.run([path, "login", "status"], capture_output=True, text=True, timeout=15)
+    except (OSError, subprocess.TimeoutExpired):
+        return {"status": "unknown"}
+    # Codex currently reports this status on stderr. Do not return or persist raw
+    # output; it is only used to distinguish ChatGPT from other login methods.
+    message = (completed.stdout + "\n" + completed.stderr).casefold()
+    if completed.returncode == 0 and "logged in using chatgpt" in message:
+        return {"status": "authenticated"}
+    if "not logged in" in message:
+        return {"status": "not-authenticated"}
+    if completed.returncode == 0 and "logged in using" in message:
+        return {"status": "other-authentication"}
+    return {"status": "unknown"}
+
+
+def codex_login(config, cwd):
+    """Start Codex's native interactive login and return only its outcome."""
+    path = executable("codex", config["runtime"].get("codex"))
+    if not path:
+        return {"status": "codex-missing"}
+    try:
+        completed = subprocess.run([path, "login"], cwd=cwd, timeout=600, check=False)
+    except subprocess.TimeoutExpired:
+        return {"status": "incomplete"}
+    except KeyboardInterrupt:
+        return {"status": "interrupted"}
+    except OSError:
+        return {"status": "failed"}
+    return {"status": "completed" if completed.returncode == 0 else "failed"}
+
+
 def inventory(config):
     """Full runtime inventory retained for worker probes; setup uses tool_inventory."""
     tools = {}

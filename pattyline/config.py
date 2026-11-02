@@ -13,7 +13,7 @@ DEFAULTS = {
     "schema": 1, "workflow": "1", "tickets": ["docs/pattyline/*/issues/*.md"],
     "instructions": [], "base": "main", "remote": "origin", "repository": "",
     "worktrees": "../pattyline-worktrees", "checks": {}, "setup": [],
-    "runtime": {"adapter": "broker", "codex": "codex", "version": "0.166.0", "cloud_model": "",
+    "runtime": {"adapter": "broker", "codex": "codex", "version": "0.166.0", "cloud_model": "gpt-6.1-sol",
                 "local_model": "", "ollama": "ollama", "ollama_url": "http://127.0.0.1:11434",
                 "container_image": "", "container_python": "python3", "api_key_env": "OPENAI_API_KEY",
                 "max_tool_calls": 30, "max_output_tokens": 4096, "context_tokens": 65536,
@@ -32,6 +32,17 @@ def global_path():
     if os.name == "nt":
         return Path(os.environ.get("APPDATA", Path.home() / "AppData/Roaming")) / "pattyline/config.toml"
     return Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "pattyline/config.toml"
+
+
+def initialize_global():
+    """Create first-run per-user defaults, leaving every existing setting untouched."""
+    path = global_path()
+    defaults = {key: deepcopy(DEFAULTS[key]) for key in GLOBAL_KEYS}
+    if path.exists():
+        existing = tomllib.loads(path.read_text(encoding="utf-8"))
+        return merge(defaults, {key: value for key, value in existing.items() if key in GLOBAL_KEYS})
+    atomic_write(path, toml_text(defaults))
+    return defaults
 
 
 def merge(left, right):

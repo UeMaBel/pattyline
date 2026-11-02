@@ -44,16 +44,18 @@ For source development, run `python -m pattyline --help` from this checkout. Her
 
 ## Initialize your project
 
-Run Pattyline in the repository it should work on. Keep the installed executable on PATH, or use its absolute path after changing directories.
+`pattyline setup` is per-user and can run before you choose a project. It initializes global provider/model and execution defaults at `%APPDATA%/pattyline/config.toml` on Windows or `$XDG_CONFIG_HOME/pattyline/config.toml` on Linux (default `~/.config/pattyline/config.toml`). It preserves the file on later runs and does not read project configuration or create project files.
+
+Run project initialization in the repository Pattyline should work on. Keep the installed executable on PATH, or use its absolute path after changing directories.
 
 ```text
-cd /path/to/your/project
 pattyline setup
+cd /path/to/your/project
 pattyline init --defaults independent
 pattyline validate --scope config
 ```
 
-`setup` inventories tools, Python, disk space and hardware without installing, authenticating, downloading or running inference. `init` creates `pattyline.toml` and adds `.pattyline/` to `.gitignore`. Repeated initialization preserves settings. For a new repository, initialize Git and create a first commit before execution; integration also needs a matching GitHub remote and base branch.
+`setup` checks Git, GitHub CLI, and Codex; asks separately before each supported install or upgrade; and guides Codex's native ChatGPT sign-in. It reports per-user readiness only when those tools are installed and Codex reports ChatGPT authentication. GitHub sign-in is not required. Setup does not install local model or container tools. `init` creates project-specific `pattyline.toml` and adds `.pattyline/` to `.gitignore`. Repeated initialization preserves settings. For a new repository, initialize Git and create a first commit before execution; integration also needs a matching GitHub remote and base branch.
 
 Global options go **before** the subcommand:
 
@@ -97,7 +99,7 @@ timeout = 120
 
 Adapt commands to your project. If `checks` is already an inline table, edit that table or convert it to sections first; do not declare the same TOML key twice. Tool/setup/check execution has no network, so dependencies must already be available in the approved environment.
 
-Supply the cloud credential in the environment variable named by `runtime.api_key_env` (default `OPENAI_API_KEY`). Keep credentials outside TOML and committed files. Codex login is not reused as a broker API credential. GitHub authentication is a separate human step:
+The broker worker still requires the cloud credential in the environment variable named by `runtime.api_key_env` (default `OPENAI_API_KEY`). Codex's ChatGPT sign-in is owned by Codex and is not reused as a broker API credential, so per-user setup readiness does not mean cloud workers are ready. Keep credentials outside TOML and committed files. GitHub authentication is a separate, project-specific human step:
 
 ```text
 gh auth login

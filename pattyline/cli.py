@@ -12,7 +12,6 @@ from .common import Blocked, canonical
 from .engine import Engine, plan
 from .git import primary
 from .preparation import Preparation, unfinished
-from .runtime import record_inventory
 from .state import State
 from .tickets import adopt, discover, legacy_preview, order, source_candidates
 
@@ -23,14 +22,10 @@ def parser():
     result.add_argument("--project", type=Path, default=Path.cwd())
     result.add_argument("--json", action="store_true", help="Emit machine-readable JSON (also used for detailed evidence)")
     commands = result.add_subparsers(dest="command", required=True)
-    setup = commands.add_parser("setup", help="Inventory tools; preview consented installations/model downloads")
-    setup.add_argument("--local", action="store_true")
+    setup = commands.add_parser("setup", help="Check shared tools and initialize per-user setup")
     setup.add_argument("--install", choices=onboarding.SHARED_COMPONENTS)
     setup.add_argument("--tool-version")
-    setup.add_argument("--download-model")
-    setup.add_argument("--yes", action="store_true", help="Explicit installation/download consent after reading the plan")
-    setup.add_argument("--probe", action="store_true", help="Record read-only runtime inventory; no inference or capability-pass claim")
-    setup.add_argument("--probe-worker", choices=["cloud:implementation", "cloud:review", "cloud:preparation", "local:implementation"], help="Opt-in bounded real model/container capability probe; requires --yes")
+    setup.add_argument("--yes", action="store_true", help="Consent to this one --install action after reviewing its plan")
     init = commands.add_parser("init", help="Create a project-local configuration snapshot or adopt selected tickets")
     init.add_argument("--defaults", choices=["global", "independent"])
     init.add_argument("--set", action="append", default=[], metavar="KEY=JSON")
@@ -105,9 +100,80 @@ def select(tickets, selection):
     return list(dict.fromkeys(identities))
 
 
+def setup(args):
+    settings_path = config.global_path()
+    root = settings_path.parent
+    created = not settings_path.exists()
+    values = config.initialize_global()
+    if args.yes and not args.install:
+        raise Blocked("--yes applies to one --install component only; setup asks separately for each tool")
+    if args.tool_version and not args.install:
+        raise Blocked("--tool-version applies to one --install component only")
+
+    result = onboarding.tool_inventory(values)
+    result["global_settings"] = {"path": str(settings_path), "status": "initialized" if created else "preserved"}
+    tools = result["tools"]
+    candidates = [args.install] if args.install else [name for name, tool in tools.items()
+                                                      if tool["presence"] == "missing" or tool["update"] == "outdated"]
+    result["actions"] = []
+    for component in candidates:
+        tool = tools[component]
+        upgrade = tool["presence"] == "installed"
+        if upgrade and tool["update"] != "outdated" and args.install:
+            result["actions"].append({"component": component, "status": "reused", "version": tool["version"]})
+            continue
+        target_version = args.tool_version or tool.get("latest_version")
+        install_plan = onboarding.installation_plan(component, values, target_version, upgrade=upgrade)
+        emit(install_plan)
+        consent = bool(args.yes)
+        if not consent and sys.stdin.isatty() and install_plan["argv"]:
+            human()
+            answer = input(f"Proceed with {install_plan['action']} of {component} {install_plan['version']}? [y/N] ")
+            consent = answer.strip().lower() in {"y", "yes"}
+        if consent:
+            human()
+            result["actions"].append(onboarding.install(root, install_plan, True))
+        elif install_plan["argv"]:
+            result["actions"].append({"component": component, "status": "declined" if sys.stdin.isatty() else "consent required",
+                                      "next_step": f"rerun setup with --install {component} after reviewing the plan"})
+        else:
+            result["actions"].append({"component": component, "status": "manual installation required",
+                                      "source": install_plan["source"],
+                                      "next_step": "follow the official installation instructions, then rerun pattyline setup"})
+
+    # Re-inventory after installations so readiness reflects verified availability.
+    result.update(onboarding.tool_inventory(values))
+    tools = result["tools"]
+    auth = onboarding.codex_auth_status(values)
+    login = {"status": "not attempted"}
+    if auth["status"] in {"not-authenticated", "other-authentication"} and tools["codex"]["presence"] == "installed":
+        login = {"status": "required", "next_step": "run pattyline setup again and choose yes when asked to start Codex's native ChatGPT sign-in"}
+        if sys.stdin.isatty() and sys.stdout.isatty():
+            human()
+            if input("Codex is not signed in with ChatGPT. Start its native sign-in now? [y/N] ").strip().lower() in {"y", "yes"}:
+                login = onboarding.codex_login(values, root)
+                auth = onboarding.codex_auth_status(values)
+            else:
+                login = {"status": "declined", "next_step": "run codex login, then rerun pattyline setup"}
+    elif auth["status"] != "authenticated":
+        login = {"status": "unavailable", "next_step": "install Codex, or run codex login status to diagnose authentication, then rerun pattyline setup"}
+
+    result["authentication"] = {"codex_chatgpt": auth["status"], "login": login["status"]}
+    required_tools = all(tools[name]["presence"] == "installed" and tools[name]["update"] != "outdated"
+                         for name in onboarding.SHARED_COMPONENTS)
+    ready = required_tools and auth["status"] == "authenticated"
+    result["readiness"] = {"ready": ready, "status": "ready" if ready else "incomplete"}
+    if not ready:
+        result["readiness"]["next_step"] = login.get("next_step", "install or update the listed tools, then rerun pattyline setup")
+    return result
+
+
 def execute(args):
-    root = primary(args.project)
     command = args.command
+    if command == "setup":
+        return setup(args)
+
+    root = primary(args.project)
     if command == "init":
         choice = args.defaults
         if not (root / "pattyline.toml").exists() and config.global_path().exists() and choice is None:
@@ -145,60 +211,7 @@ def execute(args):
         return {"configuration": str(root / "pattyline.toml"), "status": "initialized; execution readiness not yet established",
                 "discovered_sources": source_candidates(root), "adoption": "Preview selected files with init --adopt PATH ...; additional project-relative paths are accepted",
                 "next": "pattyline setup; pattyline prepare FEATURE (new idea or refinement)"}
-    values = config.load(root) if (root / "pattyline.toml").exists() else config.DEFAULTS if command == "setup" else config.load(root)
-    if command == "setup":
-        if args.yes and not args.install:
-            raise Blocked("--yes applies to one --install component only; setup asks separately for each tool")
-        if args.tool_version and not args.install:
-            raise Blocked("--tool-version applies to one --install component only")
-        result = onboarding.tool_inventory(values)
-        tools = result["tools"]
-        candidates = [args.install] if args.install else [name for name, tool in tools.items()
-                                                          if tool["presence"] == "missing" or tool["update"] == "outdated"]
-        result["actions"] = []
-        for component in candidates:
-            tool = tools[component]
-            upgrade = tool["presence"] == "installed"
-            if upgrade and tool["update"] != "outdated" and args.install:
-                result["actions"].append({"component": component, "status": "reused", "version": tool["version"]})
-                continue
-            target_version = args.tool_version or tool.get("latest_version")
-            install_plan = onboarding.installation_plan(component, values, target_version, upgrade=upgrade)
-            emit(install_plan)
-            consent = bool(args.yes)
-            if not consent and sys.stdin.isatty() and install_plan["argv"]:
-                human()
-                answer = input(f"Proceed with {install_plan['action']} of {component} {install_plan['version']}? [y/N] ")
-                consent = answer.strip().lower() in {"y", "yes"}
-            if consent:
-                human()
-                result["actions"].append(onboarding.install(root, install_plan, True))
-            elif install_plan["argv"]:
-                result["actions"].append({"component": component, "status": "declined" if sys.stdin.isatty() else "consent required",
-                                          "next_step": f"rerun setup with --install {component} after reviewing the plan"})
-            else:
-                result["actions"].append({"component": component, "status": "manual installation required",
-                                          "source": install_plan["source"],
-                                          "next_step": "follow the official installation instructions, then rerun pattyline setup"})
-        if args.download_model:
-            emit(onboarding.model_plan(values, args.download_model))
-            if args.yes:
-                human()
-                result["model_download"] = onboarding.download_model(root, values, args.download_model, True)
-        if args.local:
-            result["local"] = onboarding.local_inventory(values)
-        if args.probe:
-            result["runtime_inventory"] = record_inventory(root, values)
-        if args.probe_worker:
-            emit({"live_probe": args.probe_worker, "maximum_seconds": 60, "token_limit_per_request": values["runtime"]["max_output_tokens"], "cost": "unknown; not a guaranteed monetary cap"})
-            confirm("Run real bounded model inference and container denial exercises?", args.yes)
-            from .runtime import adapter
-            runtime = adapter(root, values)
-            if not hasattr(runtime, "probe"):
-                raise Blocked("Selected runtime has no verified live-probe implementation")
-            route, stage = args.probe_worker.split(":")
-            result["live_probe"] = runtime.probe(route, stage)
-        return result
+    values = config.load(root)
     if command == "config":
         if args.action == "save-global":
             if not args.keys or not set(args.keys) <= config.GLOBAL_KEYS:
