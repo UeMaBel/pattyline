@@ -101,6 +101,17 @@ def select(tickets, selection):
 
 
 def setup(args):
+    if not args.json:
+        print(r"""              .-=========-.
+             /  .  .  .  .  \
+            /               \
+           /=================\
+           |^^^^^^^^^^^^^^^^^|
+           \-----------------/
+           |~~~~~~~~~~~~~~~~~|
+           /=================\
+           |#################|
+            \_______________/""")
     settings_path = config.global_path()
     root = settings_path.parent
     created = not settings_path.exists()
