@@ -297,15 +297,11 @@ def setup(args):
     return result
 
 
-def execute(args):
-    command = args.command
-    if command == "setup":
-        return setup(args)
-
+def initialize_project(args):
     setup_result = None
-    if command == "init" and not args.json:
+    if not args.json:
         print_burgerpatty()
-    if command == "init" and not config.global_path().exists():
+    if not config.global_path().exists():
         # A missing per-user settings file means first-run setup has not been
         # performed. Run the same inventory/login flow before project init.
         setup_args = argparse.Namespace(json=args.json, yes=False, install=None, tool_version=None, show_banner=False)
@@ -314,110 +310,124 @@ def execute(args):
             print_setup_report(setup_result)
 
     root = primary(args.project)
-    if command == "init":
-        choice = args.defaults
-        if not (root / "pattyline.toml").exists() and config.global_path().exists() and choice is None:
-            global_values = config.merge(config.DEFAULTS, {key: value for key, value in
-                                            tomllib.loads(config.global_path().read_text(encoding="utf-8")).items()
-                                            if key in config.GLOBAL_KEYS})
-            if not args.json:
-                print_init_options(global_values)
-            if not sys.stdin.isatty():
-                raise Blocked("Choose --defaults global or --defaults independent; global settings are snapshotted only with consent")
-            choice = input("Use these global defaults for this project, or keep independent local defaults? [global/local] ").strip().lower()
-            choice = "independent" if choice == "local" else choice
-            if choice not in {"global", "independent"}:
-                raise Blocked("Explicit defaults choice required")
-        values = config.initialize(root, choice == "global")
-        if args.set:
-            human()
-            for assignment in args.set:
-                key, separator, value = assignment.partition("=")
-                if not separator or key not in values:
-                    raise Blocked("--set requires an existing top-level KEY=JSON")
-                values = config.merge(values, {key: json.loads(value)})
-            config.save(root, values)
-        if args.adopt:
-            previews = legacy_preview(root, args.adopt)
-            emit({"adoption_preview": previews})
-            if args.apply:
-                if not args.specification or not args.check or not args.scope:
-                    raise Blocked("Adoption needs --specification, --check phase:name and --scope; incomplete inputs need refinement")
-                verification = []
-                for declared in args.check:
-                    phase, separator, name = declared.partition(":")
-                    if not separator or phase not in {"baseline", "introduced"} or name not in values["checks"]:
-                        raise Blocked("--check must be baseline:NAME or introduced:NAME referencing a configured check")
-                    verification.append({"name": name, "phase": phase})
-                confirm("Adopt selected sources as unapproved drafts, preserving historical text?", args.yes)
-                result = adopt(root, previews, args.specification, verification, args.scope, args.reconcile_history)
-                return {"adopted": result, "next": "Refine drafts, include their glob in config, validate and approve"}
-            return {"result": "preview only; no ticket modified"}
-        if args.configure_only:
-            result = {"configuration": str(root / "pattyline.toml"), "status": "initialized; execution readiness not yet established",
-                      "next": "Tell Pattyline your idea to begin grilling"}
-            if setup_result is not None:
-                result["setup"] = {"readiness": setup_result["readiness"], "global_settings": setup_result["global_settings"]}
-            if not args.json:
-                print_init_options(values)
-            return result
+    choice = args.defaults
+    if not (root / "pattyline.toml").exists() and config.global_path().exists() and choice is None:
+        global_values = config.merge(config.DEFAULTS, {key: value for key, value in
+                                        tomllib.loads(config.global_path().read_text(encoding="utf-8")).items()
+                                        if key in config.GLOBAL_KEYS})
+        if not args.json:
+            print_init_options(global_values)
+        if not sys.stdin.isatty():
+            raise Blocked("Choose --defaults global or --defaults independent; global settings are snapshotted only with consent")
+        choice = input("Use these global defaults for this project, or keep independent local defaults? [global/local] ").strip().lower()
+        choice = "independent" if choice == "local" else choice
+        if choice not in {"global", "independent"}:
+            raise Blocked("Explicit defaults choice required")
+    values = config.initialize(root, choice == "global")
+    if args.set:
         human()
-        choices = unfinished(root)
-        feature = choices[-1] if choices else None
-        if not feature and not args.idea:
-            if not sys.stdin.isatty():
-                return {"configuration": str(root / "pattyline.toml"),
-                        "status": "project initialized; idea required to start grilling",
-                        "next": "Rerun init in a terminal to describe the idea, or pass --idea"}
-            args.idea = input("What would you like to build? ").strip()
-            if not args.idea:
-                raise Blocked("An idea is required to start init")
-        if not feature:
-            feature = Preparation.slug(args.idea)
-        preparation = Preparation(root, values, feature)
-        if args.idea:
-            preparation.answer(args.idea)
-        if args.preparation_review:
-            preparation.choose_review(args.preparation_review)
-        if args.show:
-            return preparation.save()
-        if args.publish:
-            return preparation.publish()
-        if preparation.value["stage"] == "breakdown" and preparation.value.get("proposed_tickets"):
-            state = preparation.show_proposal()
-            if not sys.stdin.isatty():
-                state["next"] = "Review the proposal, then rerun init with --confirm-proposal to publish"
-                return state
-            answer = input("Are these tickets what you want? [y/N] ").strip().lower()
-            if answer not in {"y", "yes"}:
-                preparation.answer("Please revise the proposed tickets to better match my intent.")
-                state = preparation.advance()
-                state["next"] = "Review the updated proposal with pattyline init"
-                return state
-            preparation.confirm_proposal()
-            return preparation.publish()
-        if args.confirm_proposal:
-            preparation.confirm_proposal()
-            return preparation.publish()
-        state = preparation.advance(args.confirm)
-        state["next"] = "Run pattyline init again to continue the conversation and workflow"
-        return state
+        for assignment in args.set:
+            key, separator, value = assignment.partition("=")
+            if not separator or key not in values:
+                raise Blocked("--set requires an existing top-level KEY=JSON")
+            values = config.merge(values, {key: json.loads(value)})
+        config.save(root, values)
+    if args.adopt:
+        previews = legacy_preview(root, args.adopt)
+        emit({"adoption_preview": previews})
+        if args.apply:
+            if not args.specification or not args.check or not args.scope:
+                raise Blocked("Adoption needs --specification, --check phase:name and --scope; incomplete inputs need refinement")
+            verification = []
+            for declared in args.check:
+                phase, separator, name = declared.partition(":")
+                if not separator or phase not in {"baseline", "introduced"} or name not in values["checks"]:
+                    raise Blocked("--check must be baseline:NAME or introduced:NAME referencing a configured check")
+                verification.append({"name": name, "phase": phase})
+            confirm("Adopt selected sources as unapproved drafts, preserving historical text?", args.yes)
+            result = adopt(root, previews, args.specification, verification, args.scope, args.reconcile_history)
+            return {"adopted": result, "next": "Refine drafts, include their glob in config, validate and approve"}
+        return {"result": "preview only; no ticket modified"}
+    if args.configure_only:
+        result = {"configuration": str(root / "pattyline.toml"), "status": "initialized; execution readiness not yet established",
+                  "next": "Tell Pattyline your idea to begin grilling"}
+        if setup_result is not None:
+            result["setup"] = {"readiness": setup_result["readiness"], "global_settings": setup_result["global_settings"]}
+        if not args.json:
+            print_init_options(values)
+        return result
+    human()
+    choices = unfinished(root)
+    feature = choices[-1] if choices else None
+    if not feature and not args.idea:
+        if not sys.stdin.isatty():
+            return {"configuration": str(root / "pattyline.toml"),
+                    "status": "project initialized; idea required to start grilling",
+                    "next": "Rerun init in a terminal to describe the idea, or pass --idea"}
+        args.idea = input("What would you like to build? ").strip()
+        if not args.idea:
+            raise Blocked("An idea is required to start init")
+    if not feature:
+        feature = Preparation.slug(args.idea)
+    preparation = Preparation(root, values, feature)
+    if args.idea:
+        preparation.answer(args.idea)
+    if args.preparation_review:
+        preparation.choose_review(args.preparation_review)
+    if args.show:
+        return preparation.save()
+    if args.publish:
+        return preparation.publish()
+    if preparation.value["stage"] == "breakdown" and preparation.value.get("proposed_tickets"):
+        state = preparation.show_proposal()
+        if not sys.stdin.isatty():
+            state["next"] = "Review the proposal, then rerun init with --confirm-proposal to publish"
+            return state
+        answer = input("Are these tickets what you want? [y/N] ").strip().lower()
+        if answer not in {"y", "yes"}:
+            preparation.answer("Please revise the proposed tickets to better match my intent.")
+            state = preparation.advance()
+            state["next"] = "Review the updated proposal with pattyline init"
+            return state
+        preparation.confirm_proposal()
+        return preparation.publish()
+    if args.confirm_proposal:
+        preparation.confirm_proposal()
+        return preparation.publish()
+    state = preparation.advance(args.confirm)
+    state["next"] = "Run pattyline init again to continue the conversation and workflow"
+    return state
+
+
+def configure_project(args):
+    root = primary(args.project)
     values = config.load(root) if (root / "pattyline.toml").exists() else config.DEFAULTS
+    if args.action == "save-global":
+        if not args.keys or not set(args.keys) <= config.GLOBAL_KEYS:
+            raise Blocked("Select global keys explicitly: " + ", ".join(sorted(config.GLOBAL_KEYS)))
+        confirm("Save selected project settings as global defaults?", args.yes)
+        existing = tomllib.loads(config.global_path().read_text(encoding="utf-8")) if config.global_path().exists() else {}
+        from .common import atomic_write
+        atomic_write(config.global_path(), config.toml_text(config.merge(existing, {k: values[k] for k in args.keys})))
+        return {"saved": args.keys, "path": str(config.global_path())}
+    preview = config.refresh(root)
+    if args.keys:
+        emit(preview)
+        confirm("Apply selected global changes? Existing approvals will require reconciliation.", args.yes)
+        config.refresh(root, args.keys)
+    return {"changes": preview, "applied": args.keys}
+
+
+def execute(args):
+    command = args.command
+    if command == "setup":
+        return setup(args)
+    if command == "init":
+        return initialize_project(args)
     if command == "config":
-        if args.action == "save-global":
-            if not args.keys or not set(args.keys) <= config.GLOBAL_KEYS:
-                raise Blocked("Select global keys explicitly: " + ", ".join(sorted(config.GLOBAL_KEYS)))
-            confirm("Save selected project settings as global defaults?", args.yes)
-            existing = tomllib.loads(config.global_path().read_text(encoding="utf-8")) if config.global_path().exists() else {}
-            from .common import atomic_write
-            atomic_write(config.global_path(), config.toml_text(config.merge(existing, {k: values[k] for k in args.keys})))
-            return {"saved": args.keys, "path": str(config.global_path())}
-        preview = config.refresh(root)
-        if args.keys:
-            emit(preview)
-            confirm("Apply selected global changes? Existing approvals will require reconciliation.", args.yes)
-            config.refresh(root, args.keys)
-        return {"changes": preview, "applied": args.keys}
+        return configure_project(args)
+    root = primary(args.project)
+    values = config.load(root) if (root / "pattyline.toml").exists() else config.DEFAULTS
     if command == "prepare":
         human()
         feature = args.feature
