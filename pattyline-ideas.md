@@ -270,3 +270,14 @@ Pattyline is the chosen working GitHub repository name. A repository can live un
 At the time of the conversation, direct queries for exact `pattyline` npm and PyPI packages returned 404. `pattyline.com` was registered, and the existing developer service [Pattylinenet](https://pattylinenet.com/) may cause naming confusion. These observations are not trademark clearance or permanent availability guarantees.
 
 Cloud adapter starting point: [Codex non-interactive mode](https://learn.chatgpt.com/docs/non-interactive-mode). Verify current commands and model availability during implementation.
+
+## Setup design update — 2026-11-02
+
+The setup boundary was re-grilled and confirmed. This decision supersedes earlier notes that place global dependency setup and provider authentication inside `init`:
+
+- `pattyline setup` is per-user, works from any directory, and does not create project files or state.
+- Setup checks Git, GitHub CLI, and Codex. It asks separately before installing or upgrading each missing/outdated component, uses official sources, and gives manual instructions when automation is unavailable.
+- Codex is the only initially supported coding agent; OpenAI is the initial model provider. Setup guides and verifies Codex's native ChatGPT sign-in. Codex owns its authentication and configuration; Pattyline does not store login secrets or edit Codex settings.
+- Pattyline creates per-user global preferences for provider/model defaults and execution limits, initialized with sensible defaults. Use Codex's current default model; do not add a setup questionnaire.
+- GitHub authentication, local inference, container tooling, and repository-specific configuration are deferred until project initialization.
+- The design is not implemented yet. The current broker execution path still requires `OPENAI_API_KEY`, separate from Codex ChatGPT sign-in.
