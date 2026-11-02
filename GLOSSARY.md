@@ -32,3 +32,12 @@ An approved handoff of local implementation work to a cloud worker, preserving t
 
 **Verification policy**:
 The required checks declared by a ticket and the evidence needed to demonstrate its acceptance criteria. Workers may add evidence but cannot weaken approved verification requirements.
+
+**Global setup**:
+Per-user preparation of Pattyline's shared tools, coding-agent sign-in, and default preferences before any project is selected.
+
+**Global settings**:
+Per-user Pattyline preferences for default providers, models, and execution limits. They are independent of project configuration; a project may later adopt selected defaults.
+
+**Coding agent**:
+A tool that can work with source files and development commands on Pattyline's behalf. Codex is the first supported coding agent.

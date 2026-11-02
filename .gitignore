@@ -5,3 +5,7 @@ __pycache__/
 .venv/
 dist/
 build/
+.scratch
+docs
+.idea
+uv.lock

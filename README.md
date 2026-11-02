@@ -42,6 +42,16 @@ Building/installing the wheel needs no package downloads once Python, venv and p
 
 For source development, run `python -m pattyline --help` from this checkout. Here and below, `python` means your chosen Python 3.11+ interpreter. With uv, use `uv run --no-project python -m pattyline --help`. The custom backend supports wheels and source distributions, **not editable installs**: `pip install -e .` and default `uv run`/`uv sync` project installation are unsupported.
 
+## Per-user setup
+
+Run `pattyline setup` from any directory. Setup is machine-wide for the current user and does not create or change project files. It checks Git, GitHub CLI, and the selected coding agent (Codex initially). If a component is missing or outdated, Pattyline shows the official source and proposed version, then asks separately before installing or upgrading it. If an automatic installation is unavailable, setup gives manual instructions.
+
+Setup guides you through Codex's ChatGPT sign-in and verifies that Codex is authenticated. Codex owns its login and configuration; Pattyline does not store the login secret or rewrite Codex settings. Pattyline creates per-user settings for provider/model preferences and execution defaults, starting from sensible defaults. OpenAI is the initial model provider. GitHub sign-in, local inference, container tools, and repository-specific settings are deferred until project initialization.
+
+**This setup flow is the agreed target and is not fully implemented in this development build.** The current `setup` command inventories tools and provides opt-in installation/probe options; it does not yet perform Codex sign-in or create the new global settings.
+
+The current broker worker still requires an `OPENAI_API_KEY` environment variable. The agreed Codex sign-in workflow and broker authentication are not connected yet.
+
 ## Initialize your project
 
 Run Pattyline in the repository it should work on. Keep the installed executable on PATH, or use its absolute path after changing directories.
@@ -53,7 +63,7 @@ pattyline init --defaults independent
 pattyline validate --scope config
 ```
 
-`setup` inventories tools, Python, disk space and hardware without installing, authenticating, downloading or running inference. `init` creates `pattyline.toml` and adds `.pattyline/` to `.gitignore`. Repeated initialization preserves settings. For a new repository, initialize Git and create a first commit before execution; integration also needs a matching GitHub remote and base branch.
+`init` creates project-specific `pattyline.toml` and adds `.pattyline/` to `.gitignore`. Repeated initialization preserves settings. Project setup will determine whether GitHub authentication, local inference, or container tools are needed. For a new repository, initialize Git and create a first commit before execution; integration also needs a matching GitHub remote and base branch.
 
 Global options go **before** the subcommand:
 
