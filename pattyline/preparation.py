@@ -27,7 +27,7 @@ def bundle(stage):
 class Preparation:
     @staticmethod
     def slug(idea):
-        value = unicodedata.normalize("ascii", idea).lower()
+        value = unicodedata.normalize("NFKD", idea).encode("ascii", "ignore").decode("ascii").lower()
         value = re.sub(r"[^a-z0-9]+", "-", value).strip("-")
         return (value[:48].rstrip("-") or "new-idea")
 

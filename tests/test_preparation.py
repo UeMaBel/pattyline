@@ -26,6 +26,10 @@ class PreparationRuntime:
 
 
 class PreparationTests(unittest.TestCase):
+    def test_slug_normalizes_idea_as_ascii(self):
+        self.assertEqual(Preparation.slug("a moving burger cli animation"), "a-moving-burger-cli-animation")
+        self.assertEqual(Preparation.slug("Crème brûlée"), "creme-brulee")
+
     def test_fresh_stage_handoffs_survive_resume_and_review_is_optional(self):
         with tempfile.TemporaryDirectory() as directory:
             runtime = PreparationRuntime()
