@@ -44,21 +44,30 @@ For source development, run `python -m pattyline --help` from this checkout. Her
 
 ## Per-user setup
 
-Run `pattyline setup` from any directory. Setup is machine-wide for the current user and does not create or change project files. It checks Git, GitHub CLI, and the selected coding agent (Codex initially). If a component is missing or outdated, Pattyline shows the official source and proposed version, then asks separately before installing or upgrading it. If an automatic installation is unavailable, setup gives manual instructions.
+Run `pattyline setup` from any directory. Setup is per-user: it initializes Pattyline's global settings and does not read or change project files. On Windows, settings live under `%APPDATA%/pattyline/config.toml`; on Linux, they live under `$XDG_CONFIG_HOME/pattyline/config.toml` or `~/.config/pattyline/config.toml`.
 
-Setup guides you through Codex's ChatGPT sign-in and verifies that Codex is authenticated. Codex owns its login and configuration; Pattyline does not store the login secret or rewrite Codex settings. Pattyline creates per-user settings for provider/model preferences and execution defaults, starting from sensible defaults. OpenAI is the initial model provider. GitHub sign-in, local inference, container tools, and repository-specific settings are deferred until project initialization.
+Setup checks Git, GitHub CLI (`gh`), and Codex. It reports installed versions and, when publisher version information is available, flags outdated tools. For each missing or outdated tool, review the displayed source and version, then answer `y` to install or upgrade that item. Each item gets its own prompt. If Pattyline cannot install a tool on your platform, follow the official link shown and rerun setup.
 
-**This setup flow is the agreed target and is not fully implemented in this development build.** The current `setup` command inventories tools and provides opt-in installation/probe options; it does not yet perform Codex sign-in or create the new global settings.
+After checking tools, setup checks Codex's native ChatGPT sign-in. If Codex is installed but not signed in with ChatGPT, setup asks whether to start Codex's login flow. Answer `y` and complete the browser or terminal steps Codex presents. Codex stores and manages its own credentials; Pattyline does not save the secret or edit Codex's configuration. If you decline or setup is noninteractive, run `codex login` yourself and then rerun `pattyline setup`.
 
-The current broker worker still requires an `OPENAI_API_KEY` environment variable. The agreed Codex sign-in workflow and broker authentication are not connected yet.
+Setup is ready when Git, `gh`, and Codex are installed and not known to be outdated, and Codex reports an authenticated ChatGPT session. GitHub CLI sign-in is not part of this step. Setup also does not install local model runtimes or containers; those depend on the project and are handled later.
+
+For one specific installation, use `--install` to review that tool's plan and prompt for consent:
+
+```text
+pattyline setup --install git
+```
+
+You can request a particular tool version with `--tool-version VERSION`. `--yes` applies only to the single `--install` item; it cannot approve all tools in one run.
+
+This setup readiness is separate from execution readiness. The current worker broker still requires `OPENAI_API_KEY`, and project execution may also need GitHub authentication, Docker, an approved tool image, and runtime capability evidence.
 
 ## Initialize your project
 
-Run Pattyline in the repository it should work on. Keep the installed executable on PATH, or use its absolute path after changing directories.
+After per-user setup is complete, run Pattyline in the repository it should work on. Keep the installed executable on PATH, or use its absolute path after changing directories.
 
 ```text
 cd /path/to/your/project
-pattyline setup
 pattyline init --defaults independent
 pattyline validate --scope config
 ```
@@ -107,43 +116,20 @@ timeout = 120
 
 Adapt commands to your project. If `checks` is already an inline table, edit that table or convert it to sections first; do not declare the same TOML key twice. Tool/setup/check execution has no network, so dependencies must already be available in the approved environment.
 
-Supply the cloud credential in the environment variable named by `runtime.api_key_env` (default `OPENAI_API_KEY`). Keep credentials outside TOML and committed files. Codex login is not reused as a broker API credential. GitHub authentication is a separate human step:
+For the current broker worker, supply the cloud API credential in the environment variable named by `runtime.api_key_env` (default `OPENAI_API_KEY`). Keep credentials outside TOML and committed files. Codex ChatGPT sign-in is used by setup but is not an API key for this broker route. GitHub authentication is a separate project step:
 
 ```text
 gh auth login
 gh auth status
 ```
 
-To preview a missing tool's installation, replace `VERSION` with your chosen version:
+The shared setup command installs only Git, GitHub CLI, and Codex. For a selected version, replace `VERSION` with the version you chose:
 
 ```text
 pattyline setup --install git --tool-version VERSION
 ```
 
-Tool names are `git`, `gh`, `codex`, `ollama` and `docker`. Inspect source, version, destination and privileges, then repeat with `--yes` to consent. Only supported platform installers run; others give manual-install guidance. Existing tools are never silently replaced/upgraded. Codex is inventoried as a candidate adapter, but the broker route does not require it.
-
-For local work, start Ollama and select a model that fits your hardware/context requirements. Replace `MODEL` with the chosen local model name:
-
-```text
-pattyline setup --local
-pattyline setup --download-model MODEL
-pattyline setup --download-model MODEL --yes
-```
-
-Set `runtime.local_model` to the installed name. Download size/storage and hardware fit may remain unknown; download success alone does not establish readiness.
-
-Real probes make model requests and may incur charges. Once configured, run the profiles you intend to use:
-
-```text
-pattyline setup --probe-worker cloud:preparation --yes
-pattyline setup --probe-worker cloud:implementation --yes
-pattyline setup --probe-worker cloud:review --yes
-pattyline setup --probe-worker local:implementation --yes
-pattyline validate --scope cloud
-pattyline validate --scope local
-```
-
-Preparation needs no container image or local model; other profiles exercise container isolation. Evidence is tied to the exact runtime/platform/configuration, so changes can require new probes. `setup --probe` records executable/version inventory only and cannot replace worker evidence. Requests have time/token bounds; hard monetary caps are unsupported.
+Existing shared tools are reused; upgrades require your consent. Local runtime installation, model downloads, container setup, and worker probes are not part of `pattyline setup` in this workflow. Configure those only when a project needs them, using that project's runtime instructions and readiness checks.
 
 ## Workflow: idea to approved tickets
 
