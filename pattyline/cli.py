@@ -25,7 +25,7 @@ def parser():
     commands = result.add_subparsers(dest="command", required=True)
     setup = commands.add_parser("setup", help="Inventory tools; preview consented installations/model downloads")
     setup.add_argument("--local", action="store_true")
-    setup.add_argument("--install", choices=sorted(onboarding.SOURCES))
+    setup.add_argument("--install", choices=onboarding.SHARED_COMPONENTS)
     setup.add_argument("--tool-version")
     setup.add_argument("--download-model")
     setup.add_argument("--yes", action="store_true", help="Explicit installation/download consent after reading the plan")
@@ -147,13 +147,39 @@ def execute(args):
                 "next": "pattyline setup; pattyline prepare FEATURE (new idea or refinement)"}
     values = config.load(root) if (root / "pattyline.toml").exists() else config.DEFAULTS if command == "setup" else config.load(root)
     if command == "setup":
-        result = onboarding.inventory(values)
-        if args.install:
-            install_plan = onboarding.installation_plan(args.install, values, args.tool_version)
+        if args.yes and not args.install:
+            raise Blocked("--yes applies to one --install component only; setup asks separately for each tool")
+        if args.tool_version and not args.install:
+            raise Blocked("--tool-version applies to one --install component only")
+        result = onboarding.tool_inventory(values)
+        tools = result["tools"]
+        candidates = [args.install] if args.install else [name for name, tool in tools.items()
+                                                          if tool["presence"] == "missing" or tool["update"] == "outdated"]
+        result["actions"] = []
+        for component in candidates:
+            tool = tools[component]
+            upgrade = tool["presence"] == "installed"
+            if upgrade and tool["update"] != "outdated" and args.install:
+                result["actions"].append({"component": component, "status": "reused", "version": tool["version"]})
+                continue
+            target_version = args.tool_version or tool.get("latest_version")
+            install_plan = onboarding.installation_plan(component, values, target_version, upgrade=upgrade)
             emit(install_plan)
-            if args.yes:
+            consent = bool(args.yes)
+            if not consent and sys.stdin.isatty() and install_plan["argv"]:
                 human()
-                result["installation"] = onboarding.install(root, install_plan, True)
+                answer = input(f"Proceed with {install_plan['action']} of {component} {install_plan['version']}? [y/N] ")
+                consent = answer.strip().lower() in {"y", "yes"}
+            if consent:
+                human()
+                result["actions"].append(onboarding.install(root, install_plan, True))
+            elif install_plan["argv"]:
+                result["actions"].append({"component": component, "status": "declined" if sys.stdin.isatty() else "consent required",
+                                          "next_step": f"rerun setup with --install {component} after reviewing the plan"})
+            else:
+                result["actions"].append({"component": component, "status": "manual installation required",
+                                          "source": install_plan["source"],
+                                          "next_step": "follow the official installation instructions, then rerun pattyline setup"})
         if args.download_model:
             emit(onboarding.model_plan(values, args.download_model))
             if args.yes:
