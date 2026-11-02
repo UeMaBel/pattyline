@@ -48,6 +48,22 @@ Run `pattyline setup` from any directory. Setup is per-user: it initializes Patt
 
 Setup checks Git, GitHub CLI (`gh`), and Codex. It reports installed versions and, when publisher version information is available, flags outdated tools. For each missing or outdated tool, review the displayed source and version, then answer `y` to install or upgrade that item. Each item gets its own prompt. If Pattyline cannot install a tool on your platform, follow the official link shown and rerun setup.
 
+### Debug Pattyline from a checkout
+
+To run the current source without building a wheel, use `uv run python -m pattyline` from the repository root. For example:
+
+```powershell
+uv run python -m pattyline setup
+```
+
+To make the `pattyline` command use the checkout in your active environment, install it once in editable mode:
+
+```powershell
+uv pip install -e .
+```
+
+The editable install points at the source tree, so code changes are picked up without rebuilding a wheel. If editable installation fails, run the module directly with `uv run python -m pattyline` instead.
+
 After checking tools, setup checks Codex's native ChatGPT sign-in. If Codex is installed but not signed in with ChatGPT, setup asks whether to start Codex's login flow. Answer `y` and complete the browser or terminal steps Codex presents. Codex stores and manages its own credentials; Pattyline does not save the secret or edit Codex's configuration. If you decline or setup is noninteractive, run `codex login` yourself and then rerun `pattyline setup`.
 
 Setup is ready when Git, `gh`, and Codex are installed and not known to be outdated, and Codex reports an authenticated ChatGPT session. GitHub CLI sign-in is not part of this step. Setup also does not install local model runtimes or containers; those depend on the project and are handled later.
