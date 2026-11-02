@@ -278,7 +278,7 @@ pattyline clean
 pattyline clean --apply --yes
 ```
 
-Cleanup previews first and only removes clean, registered, inactive, verified-integrated worktrees. Preserve `.pattyline/`: it contains durable state, evidence and recovery information, not disposable cache. Keep it out of Git; commit project configuration and workflow documents.
+`clean` previews Pattyline-generated project data (`.pattyline/`, `pattyline.toml`, and only the `.pattyline/` entry in `.gitignore`) plus eligible worktrees. Apply requires confirmation; `--yes` supplies it explicitly. The command preserves unfinished or uncertain work and refuses to remove project state while such work or an active run exists. Cleaning removes saved reports, evidence, and configuration, so review the preview before applying.
 
 ## Share configuration across projects
 

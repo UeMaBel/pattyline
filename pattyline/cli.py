@@ -66,7 +66,7 @@ def parser():
     for name in ("status", "resume", "cancel"):
         sub = commands.add_parser(name)
         sub.add_argument("run", nargs="?")
-    cleaning = commands.add_parser("clean", help="Preview safe inactive worktree cleanup")
+    cleaning = commands.add_parser("clean", help="Preview and remove Pattyline project data and safe inactive worktrees")
     cleaning.add_argument("--apply", action="store_true")
     cleaning.add_argument("--yes", action="store_true")
     return result
@@ -101,6 +101,24 @@ def print_setup_report(result):
     else:
         print("\nStatus: INCOMPLETE - a required setup step needs attention.")
         print("Next: " + result["readiness"].get("next_step", "install missing tools, then rerun pattyline setup"))
+
+
+def print_clean_report(result):
+    if result.get("removed"):
+        print("Cleaned! Pattyline project files and eligible worktrees have been removed.")
+        return
+    print("Pattyline clean preview")
+    for artifact in result.get("artifacts", []):
+        print(f"  {artifact['action']}: {artifact['path']}")
+    for worktree in result.get("worktrees", []):
+        if worktree["action"] == "remove worktree":
+            print(f"  Remove worktree {worktree['ticket']}: {worktree['path']}")
+        else:
+            print(f"  Keep worktree {worktree['ticket']}: {worktree['reason']}")
+    if result.get("blocked"):
+        print("Cannot remove project state: " + "; ".join(result["blocked"]))
+    else:
+        print("\nRun `pattyline clean --apply --yes` to remove the listed Pattyline files and eligible worktrees.")
 
 
 def human():
@@ -266,7 +284,7 @@ def execute(args):
         return {"configuration": str(root / "pattyline.toml"), "status": "initialized; execution readiness not yet established",
                 "discovered_sources": source_candidates(root), "adoption": "Preview selected files with init --adopt PATH ...; additional project-relative paths are accepted",
                 "next": "pattyline setup; pattyline prepare FEATURE (new idea or refinement)"}
-    values = config.load(root)
+    values = config.load(root) if (root / "pattyline.toml").exists() else config.DEFAULTS
     if command == "config":
         if args.action == "save-global":
             if not args.keys or not set(args.keys) <= config.GLOBAL_KEYS:
@@ -358,9 +376,12 @@ def execute(args):
     if command == "clean":
         preview = clean(root, values)
         if args.apply:
-            emit(preview)
-            confirm("Remove only clean inactive verified-integrated worktrees?", args.yes)
-            clean(root, values, True)
+            if preview.get("blocked"):
+                raise Blocked("Cannot clean Pattyline data: " + "; ".join(preview["blocked"]))
+            if not args.json:
+                print_clean_report(preview)
+            confirm("Remove the listed Pattyline project data and eligible worktrees?", args.yes)
+            return clean(root, values, True)
         return preview
     if command in {"start", "resume"}:
         engine = Engine(root, values)
@@ -386,6 +407,8 @@ def main(argv=None):
         result = execute(args)
         if args.command == "setup" and not args.json:
             print_setup_report(result)
+        elif args.command == "clean" and not args.json:
+            print_clean_report(result)
         else:
             emit(result)
         return 0
