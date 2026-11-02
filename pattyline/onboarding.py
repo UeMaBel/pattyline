@@ -82,7 +82,7 @@ def tool_inventory(config, components=SHARED_COMPONENTS):
         version = None
         if path:
             try:
-                completed = subprocess.run([path, "--version"], capture_output=True, text=True, timeout=10)
+                completed = subprocess.run([path, "--version"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10)
                 version = (completed.stdout or completed.stderr).strip()[:300]
             except (OSError, subprocess.TimeoutExpired):
                 version = "version query unavailable"
@@ -105,7 +105,7 @@ def codex_auth_status(config):
     if not path:
         return {"status": "codex-missing"}
     try:
-        completed = subprocess.run([path, "login", "status"], capture_output=True, text=True, timeout=15)
+        completed = subprocess.run([path, "login", "status"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=15)
     except (OSError, subprocess.TimeoutExpired):
         return {"status": "unknown"}
     # Codex currently reports this status on stderr. Do not return or persist raw
@@ -145,7 +145,7 @@ def inventory(config):
         version = None
         if path:
             try:
-                completed = subprocess.run([path, "--version"], capture_output=True, text=True, timeout=10)
+                completed = subprocess.run([path, "--version"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10)
                 version = (completed.stdout or completed.stderr).strip()[:300]
             except (OSError, subprocess.TimeoutExpired):
                 version = "version query unavailable"
@@ -180,7 +180,7 @@ def hardware():
     gpu = "unknown; GPU memory/driver availability requires inspection"
     if shutil.which("nvidia-smi"):
         try:
-            completed = subprocess.run(["nvidia-smi", "--query-gpu=name,memory.total,memory.free", "--format=csv,noheader,nounits"], capture_output=True, text=True, timeout=5)
+            completed = subprocess.run(["nvidia-smi", "--query-gpu=name,memory.total,memory.free", "--format=csv,noheader,nounits"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5)
             if completed.returncode == 0:
                 gpu = {"reported_name_total_free_MiB": completed.stdout.strip()}
         except (OSError, subprocess.TimeoutExpired):
@@ -192,7 +192,7 @@ def _installed_version(path):
     if not path:
         return None
     try:
-        completed = subprocess.run([path, "--version"], capture_output=True, text=True, timeout=10)
+        completed = subprocess.run([path, "--version"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10)
         return (completed.stdout or completed.stderr).strip()[:300]
     except (OSError, subprocess.TimeoutExpired):
         return "version query unavailable"

@@ -9,8 +9,9 @@ class Spinner:
 
     FRAMES = "-/\\|"
 
-    def __init__(self, message, stream=None, interval=0.12):
+    def __init__(self, message, stream=None, interval=0.12, detail=""):
         self.message = message
+        self.detail = detail
         self.stream = stream or sys.stdout
         self.interval = interval
         self._stop = threading.Event()
@@ -33,7 +34,10 @@ class Spinner:
     def _animate(self):
         index = 0
         while not self._stop.is_set():
-            self.stream.write(f"\r{self.FRAMES[index % len(self.FRAMES)]} {self.message}")
+            suffix = " (" + self.detail + ")" if self.detail else ""
+            self.stream.write(f"\r{self.FRAMES[index % len(self.FRAMES)]} {self.message}{suffix}")
             self.stream.flush()
             index += 1
             self._stop.wait(self.interval)
+
+

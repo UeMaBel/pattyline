@@ -77,7 +77,7 @@ class Container:
         self.config = config
 
     def docker(self, *argv, check=True):
-        response = subprocess.run(["docker", *argv], capture_output=True, text=True, timeout=30)
+        response = subprocess.run(["docker", *argv], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
         if check and response.returncode:
             raise Blocked(f"Container {argv[0]} failed; verify Docker service, pinned image and mount permissions")
         return response

@@ -39,7 +39,9 @@ class Preparation:
         self.directory.mkdir(parents=True, exist_ok=True)
         self.path = self.directory / "preparation.json"
         self.config = config
-        self.runtime = runtime if runtime is not None else adapter(root, config)
+        # The interview/spec workflow is conversational and uses the user's
+        # signed-in Codex CLI. Keep the configured runtime for execution only.
+        self.runtime = runtime if runtime is not None else adapter(root, {**config, "runtime": {**config["runtime"], "adapter": "codex"}})
         self.value = load_json(self.path, {"schema": 1, "feature": feature, "stage": "interview",
                  "decisions": [], "terms": {}, "open_questions": [], "messages": [], "sessions": [],
                  "confirmed": False, "review_choice": "undecided", "breakdown_approved": False, "progress": []})

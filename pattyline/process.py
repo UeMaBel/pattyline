@@ -56,7 +56,7 @@ def reconcile_process(record):
     if not record:
         return "stopped"
     if record.get("mechanism") == "docker":
-        response = subprocess.run(["docker", "inspect", record.get("id") or record["name"]], capture_output=True, text=True, timeout=10)
+        response = subprocess.run(["docker", "inspect", record.get("id") or record["name"]], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10)
         if response.returncode:
             return "uncertain: container state unavailable; preserve ownership"
         container = __import__('json').loads(response.stdout)[0]

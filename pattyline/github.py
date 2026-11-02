@@ -15,7 +15,7 @@ class GitHub:
     def gh(self, *args, check=True):
         if not shutil.which("gh"):
             raise Blocked("Install GitHub CLI (gh), then gh auth login")
-        result = subprocess.run(["gh", *args], cwd=self.root, capture_output=True, text=True, timeout=60)
+        result = subprocess.run(["gh", *args], cwd=self.root, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
         if check and result.returncode:
             raise Blocked("GitHub operation unavailable; check gh authentication/repository permissions (sensitive output withheld)")
         return result

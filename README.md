@@ -76,7 +76,7 @@ pattyline setup --install git
 
 You can request a particular tool version with `--tool-version VERSION`. `--yes` applies only to the single `--install` item; it cannot approve all tools in one run.
 
-This setup readiness is separate from execution readiness. The current worker broker still requires `OPENAI_API_KEY`, and project execution may also need GitHub authentication, Docker, an approved tool image, and runtime capability evidence.
+This setup readiness is separate from execution readiness. Live `init` preparation uses the signed-in Codex CLI and does not need an API key. Project execution may also need GitHub authentication, Docker, an approved tool image, and runtime capability evidence.
 
 ## Initialize your project
 
@@ -102,7 +102,7 @@ Commands emit JSON. `--json` also requests detailed evidence from `status`. Exit
 | Task | Requirements |
 | --- | --- |
 | Offline configuration, ticket validation and planning | Python, Git, project configuration and source documents |
-| Live feature preparation | Explicit cloud model, API credential and real `cloud:preparation` probe |
+| Live feature preparation | Installed Codex CLI, native ChatGPT sign-in and configured model |
 | Cloud implementation/review | Cloud model/credential, Docker running Linux containers, approved local tool image and matching worker probes |
 | Local implementation | Docker/tool image, running loopback Ollama, installed local model and `local:implementation` probe; cloud review is still mandatory |
 | GitHub integration | Authenticated GitHub CLI, repository permissions, matching remote, merge commits and strict required checks; currently blocked by the unfinished freshness gate |
@@ -131,7 +131,9 @@ timeout = 120
 
 Adapt commands to your project. If `checks` is already an inline table, edit that table or convert it to sections first; do not declare the same TOML key twice. Tool/setup/check execution has no network, so dependencies must already be available in the approved environment.
 
-For the current broker worker, supply the cloud API credential in the environment variable named by `runtime.api_key_env` (default `OPENAI_API_KEY`). Keep credentials outside TOML and committed files. Codex ChatGPT sign-in is used by setup but is not an API key for this broker route. GitHub authentication is a separate project step:
+`runtime.cloud_model` also selects the model for Codex-backed `init` preparation. Change it in `pattyline.toml`, for example `cloud_model = "gpt-6.1"` under `[runtime]`, or use `pattyline init --set 'runtime={"cloud_model":"gpt-6.1"}'` when initializing. Pattyline passes this value to `codex exec --model`; choose a model supported by your installed Codex account.
+
+The broker worker uses an API credential for cloud implementation/review. `init` preparation is routed through the signed-in Codex CLI instead. GitHub authentication is a separate project step:
 
 ```text
 gh auth login
