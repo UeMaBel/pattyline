@@ -153,6 +153,9 @@ def setup(args):
             if input("Codex is not signed in with ChatGPT. Start its native sign-in now? [y/N] ").strip().lower() in {"y", "yes"}:
                 login = onboarding.codex_login(values, root)
                 auth = onboarding.codex_auth_status(values)
+                if login["status"] == "completed" and auth["status"] != "authenticated":
+                    login = {"status": "verification-failed",
+                             "next_step": "Codex sign-in did not verify as ChatGPT-authenticated; run codex login status and rerun pattyline setup"}
             else:
                 login = {"status": "declined", "next_step": "run codex login, then rerun pattyline setup"}
     elif auth["status"] != "authenticated":

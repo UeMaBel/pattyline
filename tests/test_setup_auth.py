@@ -88,6 +88,16 @@ class CodexAuthenticationTests(unittest.TestCase):
         self.assertEqual(result["authentication"]["login"], "interrupted")
         self.assertFalse(result["readiness"]["ready"])
 
+    def test_zero_exit_without_verified_chatgpt_auth_is_not_reported_complete(self):
+        code, result, _, login = self.run_setup(
+            [{"status": "not-authenticated"}, {"status": "not-authenticated"}],
+            login={"status": "completed"}, interactive=True)
+        self.assertEqual(code, 0)
+        login.assert_called_once()
+        self.assertEqual(result["authentication"]["login"], "verification-failed")
+        self.assertFalse(result["readiness"]["ready"])
+        self.assertIn("did not verify", result["readiness"]["next_step"])
+
     def test_missing_required_tool_keeps_final_readiness_incomplete(self):
         code, result, _, login = self.run_setup(
             [{"status": "authenticated"}],
