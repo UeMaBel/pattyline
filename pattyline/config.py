@@ -29,9 +29,16 @@ GLOBAL_KEYS = {"runtime", "permissions", "limits", "escalation"}
 
 
 def global_path():
-    if os.name == "nt":
-        return Path(os.environ.get("APPDATA", Path.home() / "AppData/Roaming")) / "pattyline/config.toml"
-    return Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "pattyline/config.toml"
+    return _global_path(os.name, os.environ, Path.home())
+
+
+def _global_path(os_name, environ, home):
+    """Resolve the per-user settings file for a supplied platform/environment."""
+    if os_name == "nt":
+        base = Path(environ.get("APPDATA", Path(home) / "AppData/Roaming"))
+    else:
+        base = Path(environ.get("XDG_CONFIG_HOME", Path(home) / ".config"))
+    return base / "pattyline/config.toml"
 
 
 def initialize_global():

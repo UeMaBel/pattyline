@@ -12,6 +12,18 @@ from pattyline.cli import main
 
 
 class GlobalSetupTests(unittest.TestCase):
+    def test_global_settings_path_resolves_windows_and_linux_user_roots(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            appdata = root / "windows-roaming"
+            xdg = root / "linux-config"
+
+            windows_path = config._global_path("nt", {"APPDATA": str(appdata)}, root)
+            linux_path = config._global_path("posix", {"XDG_CONFIG_HOME": str(xdg)}, root)
+
+            self.assertEqual(windows_path, appdata / "pattyline/config.toml")
+            self.assertEqual(linux_path, xdg / "pattyline/config.toml")
+
     def test_cli_initializes_user_settings_without_reading_or_changing_project_files(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
