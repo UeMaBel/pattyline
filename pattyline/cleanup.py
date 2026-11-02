@@ -2,12 +2,12 @@
 from pathlib import Path
 import shutil
 
-from .common import Blocked, atomic_write
+from .common import Blocked, atomic_write, load_json
 from .git import git
 from .state import State
 
 
-def clean(root, config, apply=False):
+def clean(root, config, apply=False, all_artifacts=False):
     root = Path(root).resolve()
     state_dir = root / ".pattyline"
     if state_dir.is_symlink():
@@ -39,6 +39,21 @@ def clean(root, config, apply=False):
     gitignore = root / ".gitignore"
     if state_dir.exists():
         artifacts.append({"path": str(state_dir), "action": "remove Pattyline state, reports, and evidence"})
+    preparation_dirs = []
+    if all_artifacts:
+        # Only remove feature directories carrying Pattyline's own preparation
+        # manifest. Other documentation and ticket directories may be user data.
+        base = root / "docs/pattyline"
+        if base.is_dir() and not base.is_symlink():
+            for manifest in sorted(base.glob("*/preparation.json")):
+                directory = manifest.parent
+                if manifest.is_symlink() or directory.is_symlink():
+                    continue
+                value = load_json(manifest, {})
+                if value.get("feature") != directory.name:
+                    continue
+                preparation_dirs.append(directory)
+                artifacts.append({"path": str(directory), "action": "remove init preparation files, Markdown drafts, and issues"})
     if project_config.exists():
         artifacts.append({"path": str(project_config), "action": "remove Pattyline project configuration"})
     ignore_entry = False
@@ -73,6 +88,9 @@ def clean(root, config, apply=False):
             state.close()
         if state_dir.exists():
             shutil.rmtree(state_dir)
+        for directory in preparation_dirs:
+            if directory.exists() and not directory.is_symlink():
+                shutil.rmtree(directory)
         if project_config.exists() or project_config.is_symlink():
             project_config.unlink()
         if ignore_entry:

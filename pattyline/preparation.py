@@ -2,6 +2,7 @@
 from importlib.resources import files
 from pathlib import Path
 import re
+import unicodedata
 import uuid
 
 from .common import Blocked, atomic_write, digest, load_json, now, within, write_json
@@ -24,6 +25,12 @@ def bundle(stage):
 
 
 class Preparation:
+    @staticmethod
+    def slug(idea):
+        value = unicodedata.normalize("ascii", idea).lower()
+        value = re.sub(r"[^a-z0-9]+", "-", value).strip("-")
+        return (value[:48].rstrip("-") or "new-idea")
+
     def __init__(self, root, config, feature, runtime=None):
         if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", feature):
             raise Blocked("Feature must be a lowercase slug")
@@ -58,6 +65,21 @@ class Preparation:
         self.value["review_choice"] = choice
         return self.save()
 
+    def show_proposal(self):
+        path = self.directory / "ticket-proposal.md"
+        return {"feature": self.feature, "stage": self.value["stage"],
+                "proposal": path.read_text(encoding="utf-8") if path.exists() else "",
+                "tickets": self.value.get("proposed_tickets", []),
+                "open_questions": self.value["open_questions"]}
+
+    def confirm_proposal(self):
+        if self.value["stage"] != "breakdown" or not self.value.get("proposed_tickets") or self.value["open_questions"]:
+            raise Blocked("A complete ticket proposal without open questions is required")
+        self.value["breakdown_confirmed"] = True
+        self.value["breakdown_approved"] = True
+        self.value["stage"] = "approval"
+        return self.save()
+
     def advance(self, confirm=False, approve_breakdown=False):
         stage = self.value["stage"]
         if confirm:
@@ -79,7 +101,7 @@ class Preparation:
             if self.value["review_choice"] == "undecided":
                 raise Blocked("Choose whether independent preparation review is wanted")
             self.value["breakdown_approved"] = True
-            self.value["stage"] = "preparation-review" if self.value["review_choice"] == "yes" else "approval"
+            self.value["stage"] = "approval"
             return self.save()
         if stage == "approval":
             return self.save()
@@ -157,10 +179,13 @@ class Preparation:
 
     def publish(self):
         from .tickets import parse, order, discover
-        if self.value["stage"] != "approval" or not self.value["breakdown_approved"] or self.value["open_questions"]:
-            raise Blocked("Publication requires an approved breakdown without unresolved questions")
-        if self.value["review_choice"] == "yes" and self.value.get("review_verdict") != "approved":
-            raise Blocked("Selected independent preparation review has not approved the proposal")
+        if self.value["stage"] == "complete":
+            return {"published": self.value.get("published", []),
+                    "status": "init complete; drafts require validation and human approval"}
+        if self.value["stage"] not in {"approval", "breakdown"} or self.value["open_questions"]:
+            raise Blocked("Ticket publication requires a settled proposal with no unresolved questions")
+        if self.value["stage"] == "breakdown" and not self.value.get("breakdown_confirmed"):
+            raise Blocked("Show the proposed tickets and confirm they match your intent before publication")
         proposed = self.value.get("proposed_tickets")
         if not proposed:
             raise Blocked("No structured ticket drafts; return to breakdown refinement")
@@ -202,8 +227,9 @@ class Preparation:
                 if not target.exists():
                     temporary.replace(target)
             self.value["published"] = [str(target.relative_to(self.root)) for _, target, _ in staged]
+            self.value["stage"] = "complete"
             self.save()
-            return {"published": self.value["published"], "status": "drafts; run validate and human approve for execution"}
+            return {"published": self.value["published"], "status": "init complete; drafts require validation and human approval"}
         finally:
             for temporary in temporary_paths:
                 if temporary.exists():
@@ -212,4 +238,4 @@ class Preparation:
 
 def unfinished(root):
     return [p.parent.name for p in sorted(Path(root).glob("docs/pattyline/*/preparation.json"))
-            if load_json(p).get("stage") != "approval"]
+            if load_json(p).get("stage") != "complete"]

@@ -21,17 +21,22 @@ class CliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             output = io.StringIO()
             with contextlib.redirect_stdout(output):
-                self.assertEqual(main(["--project", directory, "init", "--defaults", "independent"]), 0)
+                with patch("sys.stdin.isatty", return_value=False):
+                    self.assertEqual(main(["--project", directory, "init", "--defaults", "independent", "--configure-only"]), 0)
                 first = (Path(directory) / "pattyline.toml").read_text()
-                self.assertEqual(main(["--project", directory, "init"]), 0)
+                with patch("sys.stdin.isatty", return_value=False):
+                    self.assertEqual(main(["--project", directory, "init", "--configure-only"]), 0)
                 self.assertEqual(first, (Path(directory) / "pattyline.toml").read_text())
-                self.assertEqual(main(["--project", directory, "init", "--set", 'runtime={"cloud_model":"chosen-model"}']), 0)
+                self.assertEqual(main(["--project", directory, "init", "--configure-only", "--set", 'runtime={"cloud_model":"chosen-model"}']), 0)
                 from pattyline.config import load
                 self.assertEqual(load(directory)["runtime"]["cloud_model"], "chosen-model")
                 self.assertEqual(load(directory)["runtime"]["adapter"], "broker")
                 self.assertEqual(main(["--project", directory, "validate", "--scope", "config"]), 0)
                 self.assertEqual(main(["--project", directory, "prepare"]), 2)
+                with patch("sys.stdin.isatty", return_value=False):
+                    self.assertEqual(main(["--project", directory, "init", "--idea", "Search articles"]), 2)
             self.assertIn("feature slug", output.getvalue())
+            self.assertIn("Select a feature slug", output.getvalue())
 
     def test_yolo_does_not_bypass_readiness_or_approval(self):
         project = Project()

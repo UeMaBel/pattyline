@@ -84,11 +84,10 @@ After per-user setup is complete, run Pattyline in the repository it should work
 
 ```text
 cd /path/to/your/project
-pattyline init --defaults independent
-pattyline validate --scope config
+pattyline init
 ```
 
-`init` shows the important defaults and lets you choose whether to snapshot your global defaults or use independent local defaults. It creates project-specific `pattyline.toml` and adds `.pattyline/` to `.gitignore`; repeated initialization preserves settings. To change this project's parameters later, edit `pattyline.toml` and run `pattyline validate --scope config`. Global defaults are only copied at initialization, so later global changes do not overwrite project settings. Project setup will determine whether GitHub authentication, local inference, or container tools are needed. For a new repository, initialize Git and create a first commit before execution; integration also needs a matching GitHub remote and base branch.
+`init` shows the important defaults and lets you choose whether to snapshot your global defaults or use independent local defaults. It creates project-specific `pattyline.toml` and adds `.pattyline/` to `.gitignore`; repeated initialization preserves settings. It then asks what you want to build and starts grilling the idea. To change this project's parameters later, edit `pattyline.toml` and run `pattyline validate --scope config`. Global defaults are only copied at initialization, so later global changes do not overwrite project settings. Project setup will determine whether GitHub authentication, local inference, or container tools are needed. For a new repository, initialize Git and create a first commit before execution; integration also needs a matching GitHub remote and base branch.
 
 Global options go **before** the subcommand:
 
@@ -149,45 +148,43 @@ Existing shared tools are reused; upgrades require your consent. Local runtime i
 
 ## Workflow: idea to approved tickets
 
-Use a lowercase feature slug such as `search`. Run preparation and human approval commands from your own terminal. Worker sessions, including those marked with `CODEX_THREAD_ID`, cannot perform these human actions.
+Run init from your own terminal. Worker sessions, including those marked with `CODEX_THREAD_ID`, cannot answer grilling or confirm ticket proposals.
 
 ### 1. Interview and specification
 
 ```text
-pattyline prepare search --answer "Add search over published articles."
-pattyline prepare search --show
+pattyline init
 ```
 
-Read the returned decisions/questions and files under `docs/pattyline/search/`. Continue with `prepare search --answer "..."` until decisions are settled and open questions resolved. Then confirm and generate the specification:
+Answer the grilling questions and review the durable decisions/questions under `docs/pattyline/`. Pattyline continues the interview and specification across fresh sessions, then proposes implementation tickets.
 
 ```text
-pattyline prepare search --confirm
-pattyline prepare search
+pattyline init
 ```
 
-Confirmation records settled glossary/ADR content and advances to specification. The next call generates `spec.md`; inspect it before continuing. `preparation.json`, `handoff.md` and `index.md` preserve the frontier so you can return to the feature later. `--show` displays/saves state without model dispatch.
+Once the interview settles, Pattyline confirms the decision frontier and generates `spec.md`. `preparation.json`, `handoff.md` and `index.md` preserve the frontier across fresh sessions. For noninteractive use, `--idea "..."` supplies the initial idea.
 
-### 2. Breakdown, optional preparation review and publication
+### 2. Breakdown and publication
 
 ```text
-pattyline prepare search
-pattyline prepare search --preparation-review yes --show
+pattyline init
 ```
 
-The breakdown call produces `ticket-proposal.md` and structured tickets. Inspect scope, dependencies, routes, checks and acceptance criteria. Resolve questions with `--answer` and rerun preparation as needed. Choose `--preparation-review yes` or `no` explicitly, then approve the proposal:
+The breakdown produces `ticket-proposal.md` and structured tickets. Pattyline shows the proposal and asks whether the tickets match your intent. Say yes to write drafts, or no to send the proposal back for revision.
 
 ```text
-pattyline prepare search --approve-breakdown
+pattyline init
 ```
 
-If you chose review, run `pattyline prepare search` again to perform it. A changes-required result returns to breakdown refinement and requires fresh breakdown approval. Once the stage is `approval`, publish:
+Pattyline shows the proposed ticket slices and asks whether they match what you want. Say yes to write the ticket drafts; say no to have the breakdown revised. No separate ticket approval step is needed during init.
 
 ```text
-pattyline prepare search --publish
 pattyline validate --scope tickets
 ```
 
-Publication writes **unapproved native drafts** under `docs/pattyline/search/issues/`. Ensure `tickets` includes their paths. Preparation-review choice never disables the mandatory independent cloud implementation review.
+Publishing marks `init` complete. Use `start` to launch orchestration when execution requirements are ready. `prepare` remains available as a compatibility alias for this lifecycle.
+
+Publication writes native draft tickets under `docs/pattyline/<idea>/issues/`. Ensure `tickets` includes their paths. Mandatory independent cloud implementation review remains part of execution.
 
 ### 3. Execution approval
 

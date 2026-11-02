@@ -9,8 +9,8 @@ stage-limited by Pattyline. A session result cannot approve executable tickets.
 Breakdown also returns tickets: an array with number (immutable numeric string),
 title, outcome, route (local/cloud), dependencies (native IDs), scope (relative
 patterns), verification (name/phase objects), acceptance (one-line criteria array),
-and cloud_escalation_allowed (boolean). Pattyline validates and publishes drafts
-after human breakdown approval and the selected preparation review.
+and cloud_escalation_allowed (boolean). Ask whether the proposed tickets match
+the human's intent; Pattyline publishes them after an explicit yes.
 
 # Glossary draft
 
@@ -29,5 +29,5 @@ failure behavior; approval/permissions; acceptance/evidence; external blockers.
 
 For each numbered slice: observable outcome, scope, acceptance criteria, explicit
 blocking IDs, route, verification [{name, phase}], external evidence and approved
-escalation. Include a graph and granularity/dependency questions. Keep proposed
-ticket content separate from the human's approval.
+escalation. Include a dependency graph, ask whether these tickets match the
+human's intent, and record any requested changes before publication.

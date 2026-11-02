@@ -27,9 +27,10 @@ def parser():
     setup.add_argument("--install", choices=onboarding.SHARED_COMPONENTS)
     setup.add_argument("--tool-version")
     setup.add_argument("--yes", action="store_true", help="Consent to this one --install action after reviewing its plan")
-    init = commands.add_parser("init", help="Create a project-local configuration snapshot or adopt selected tickets")
+    init = commands.add_parser("init", help="Initialize project settings and take an idea through specification to ticket drafts")
     init.add_argument("--defaults", choices=["global", "independent"])
     init.add_argument("--set", action="append", default=[], metavar="KEY=JSON")
+    init.add_argument("--configure-only", action="store_true", help=argparse.SUPPRESS)
     init.add_argument("--adopt", nargs="+")
     init.add_argument("--specification")
     init.add_argument("--check", action="append", default=[], metavar="baseline:NAME|introduced:NAME")
@@ -37,14 +38,21 @@ def parser():
     init.add_argument("--reconcile-history", action="store_true")
     init.add_argument("--apply", action="store_true")
     init.add_argument("--yes", action="store_true")
-    prepare = commands.add_parser("prepare", help="Start/resume preparation with durable handoffs")
+    init.add_argument("--idea", "--answer", dest="idea", help="Add or refine the idea/specification")
+    init.add_argument("--confirm", action="store_true", help=argparse.SUPPRESS)
+    init.add_argument("--preparation-review", choices=["yes", "no"])
+    init.add_argument("--confirm-proposal", action="store_true", help="Confirm the displayed ticket proposal")
+    init.add_argument("--approve-breakdown", action="store_true", help=argparse.SUPPRESS)
+    init.add_argument("--show", action="store_true", help=argparse.SUPPRESS)
+    init.add_argument("--publish", action="store_true", help=argparse.SUPPRESS)
+    prepare = commands.add_parser("prepare", help="Compatibility alias for the init idea/specification workflow")
     prepare.add_argument("feature", nargs="?")
     prepare.add_argument("--answer")
     prepare.add_argument("--confirm", action="store_true")
     prepare.add_argument("--preparation-review", choices=["yes", "no"])
     prepare.add_argument("--approve-breakdown", action="store_true")
     prepare.add_argument("--show", action="store_true")
-    prepare.add_argument("--publish", action="store_true", help="Publish approved breakdown as unapproved native execution drafts")
+    prepare.add_argument("--publish", action="store_true", help="Compatibility publication command")
     approve = commands.add_parser("approve", help="Show requirements and record exact human approval")
     approve.add_argument("selection", nargs="+")
     approve.add_argument("--yes", action="store_true")
@@ -69,6 +77,7 @@ def parser():
     cleaning = commands.add_parser("clean", help="Preview and remove Pattyline project data and safe inactive worktrees")
     cleaning.add_argument("--apply", action="store_true")
     cleaning.add_argument("--yes", action="store_true")
+    cleaning.add_argument("--all", action="store_true", help="Also remove init preparation directories, Markdown drafts, and published issue drafts")
     return result
 
 
@@ -135,7 +144,24 @@ def print_init_options(values):
 
 def print_init_report(result):
     if "configuration" not in result:
-        emit(result)
+        if "stage" in result:
+            print("\nPattyline init: " + result["stage"])
+            if result.get("proposal"):
+                print("\n" + result["proposal"])
+            for ticket in result.get("tickets", []):
+                print("  " + str(ticket.get("number")) + ": " + str(ticket.get("title")))
+            if result.get("next"):
+                print("Next: " + result["next"])
+            if result.get("open_questions"):
+                print("Open questions:")
+                for question in result["open_questions"]:
+                    print("  - " + str(question))
+            if result.get("published"):
+                print("Published drafts:")
+                for path in result["published"]:
+                    print("  " + path)
+        else:
+            emit(result)
         return
     print("\nProject initialized")
     print("  Local settings: " + result["configuration"])
@@ -327,17 +353,55 @@ def execute(args):
                 result = adopt(root, previews, args.specification, verification, args.scope, args.reconcile_history)
                 return {"adopted": result, "next": "Refine drafts, include their glob in config, validate and approve"}
             return {"result": "preview only; no ticket modified"}
-        next_step = "pattyline prepare FEATURE (new idea or refinement)"
-        if setup_result is not None and not setup_result["readiness"]["ready"]:
-            next_step = "Complete the reported setup steps, then run pattyline setup before preparing a feature"
-        result = {"configuration": str(root / "pattyline.toml"), "status": "initialized; execution readiness not yet established",
-                  "discovered_sources": source_candidates(root), "adoption": "Preview selected files with init --adopt PATH ...; additional project-relative paths are accepted",
-                  "next": next_step}
-        if setup_result is not None:
-            result["setup"] = {"readiness": setup_result["readiness"], "global_settings": setup_result["global_settings"]}
-        if not args.json:
-            print_init_options(values)
-        return result
+        if args.configure_only:
+            result = {"configuration": str(root / "pattyline.toml"), "status": "initialized; execution readiness not yet established",
+                      "next": "Tell Pattyline your idea to begin grilling"}
+            if setup_result is not None:
+                result["setup"] = {"readiness": setup_result["readiness"], "global_settings": setup_result["global_settings"]}
+            if not args.json:
+                print_init_options(values)
+            return result
+        human()
+        choices = unfinished(root)
+        feature = choices[-1] if choices else None
+        if not feature and not args.idea:
+            if not sys.stdin.isatty():
+                return {"configuration": str(root / "pattyline.toml"),
+                        "status": "project initialized; idea required to start grilling",
+                        "next": "Rerun init in a terminal to describe the idea, or pass --idea"}
+            args.idea = input("What would you like to build? ").strip()
+            if not args.idea:
+                raise Blocked("An idea is required to start init")
+        if not feature:
+            feature = Preparation.slug(args.idea)
+        preparation = Preparation(root, values, feature)
+        if args.idea:
+            preparation.answer(args.idea)
+        if args.preparation_review:
+            preparation.choose_review(args.preparation_review)
+        if args.show:
+            return preparation.save()
+        if args.publish:
+            return preparation.publish()
+        if preparation.value["stage"] == "breakdown" and preparation.value.get("proposed_tickets"):
+            state = preparation.show_proposal()
+            if not sys.stdin.isatty():
+                state["next"] = "Review the proposal, then rerun init with --confirm-proposal to publish"
+                return state
+            answer = input("Are these tickets what you want? [y/N] ").strip().lower()
+            if answer not in {"y", "yes"}:
+                preparation.answer("Please revise the proposed tickets to better match my intent.")
+                state = preparation.advance()
+                state["next"] = "Review the updated proposal with pattyline init"
+                return state
+            preparation.confirm_proposal()
+            return preparation.publish()
+        if args.confirm_proposal:
+            preparation.confirm_proposal()
+            return preparation.publish()
+        state = preparation.advance(args.confirm)
+        state["next"] = "Run pattyline init again to continue the conversation and workflow"
+        return state
     values = config.load(root) if (root / "pattyline.toml").exists() else config.DEFAULTS
     if command == "config":
         if args.action == "save-global":
@@ -428,14 +492,14 @@ def execute(args):
         finally:
             state.close()
     if command == "clean":
-        preview = clean(root, values)
+        preview = clean(root, values, all_artifacts=args.all)
         if args.apply:
             if preview.get("blocked"):
                 raise Blocked("Cannot clean Pattyline data: " + "; ".join(preview["blocked"]))
             if not args.json:
                 print_clean_report(preview)
             confirm("Remove the listed Pattyline project data and eligible worktrees?", args.yes)
-            return clean(root, values, True)
+            return clean(root, values, True, all_artifacts=args.all)
         return preview
     if command in {"start", "resume"}:
         engine = Engine(root, values)

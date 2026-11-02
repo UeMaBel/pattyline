@@ -42,11 +42,10 @@ class PreparationTests(unittest.TestCase):
                 preparation.advance(approve_breakdown=True)
             preparation.choose_review("yes")
             preparation.advance(approve_breakdown=True)
-            preparation.advance()
             self.assertEqual(preparation.value["stage"], "approval")
             sessions = [session["session"] for session in preparation.value["sessions"]]
             self.assertEqual(len(sessions), len(set(sessions)))
-            self.assertEqual(len(sessions), 4)
+            self.assertEqual(len(sessions), 3)
             self.assertTrue((Path(directory) / "docs/pattyline/feature/handoff.md").is_file())
             self.assertIn("to-tickets", runtime.prompts[2]["skills"])
             self.assertEqual(runtime.prompts[2]["state"]["decisions"], ["Build a CLI"])

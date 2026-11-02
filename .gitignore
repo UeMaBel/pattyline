@@ -8,3 +8,5 @@ build/
 docs
 .idea
 uv.lock
+.pattyline/
+pattyline.toml
