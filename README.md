@@ -66,7 +66,7 @@ The editable install points at the source tree, so code changes are picked up wi
 
 After checking tools, setup checks Codex's native ChatGPT sign-in. If Codex is installed but not signed in with ChatGPT, setup asks whether to start Codex's login flow. Answer `y` and complete the browser or terminal steps Codex presents. Codex stores and manages its own credentials; Pattyline does not save the secret or edit Codex's configuration. If you decline or setup is noninteractive, run `codex login` yourself and then rerun `pattyline setup`.
 
-Setup is ready when Git, `gh`, and Codex are installed and not known to be outdated, and Codex reports an authenticated ChatGPT session. GitHub CLI sign-in is not part of this step. Setup also does not install local model runtimes or containers; those depend on the project and are handled later.
+Setup is ready when Git, `gh`, and Codex are installed and Codex reports an authenticated ChatGPT session. Updates are optional: declining one leaves the installed version in place, and setup can still be ready. GitHub CLI sign-in is not part of this step. Setup also does not install local model runtimes or containers; those depend on the project and are handled later.
 
 For one specific installation, use `--install` to review that tool's plan and prompt for consent:
 

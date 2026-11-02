@@ -76,6 +76,33 @@ def emit(value):
     print(json.dumps(value, indent=2, ensure_ascii=False, default=str))
 
 
+def print_setup_report(result):
+    """Render setup status for people; --json retains the structured report."""
+    print("\nPattyline setup")
+    print("==============")
+    print("\nTools")
+    for name, tool in result["tools"].items():
+        version = tool.get("version") or "not found"
+        state = tool["presence"]
+        if state == "installed" and tool.get("update") == "outdated":
+            state = "update available"
+        elif state == "installed":
+            state = "up to date" if tool.get("update") == "current" else "installed"
+        print(f"  {name:<7} {version} ({state})")
+    authentication = result["authentication"]["codex_chatgpt"]
+    auth_text = "signed in with ChatGPT" if authentication == "authenticated" else authentication.replace("-", " ")
+    print(f"\nCodex: {auth_text}")
+    if result["readiness"]["ready"]:
+        print("\nStatus: READY - Pattyline setup is complete. You can continue.")
+        declined = [action["component"] for action in result["actions"] if action["status"] == "declined"]
+        if declined:
+            print("Skipped optional updates: " + ", ".join(declined) + ". Installed versions remain available.")
+        print("Next: run `pattyline init` in the project you want Pattyline to work on.")
+    else:
+        print("\nStatus: INCOMPLETE - a required setup step needs attention.")
+        print("Next: " + result["readiness"].get("next_step", "install missing tools, then rerun pattyline setup"))
+
+
 def human():
     if os.environ.get("PATTYLINE_WORKER") or os.environ.get("CODEX_THREAD_ID"):
         raise Blocked("Worker sessions cannot perform human approvals, installations or policy changes")
@@ -138,7 +165,16 @@ def setup(args):
             continue
         target_version = args.tool_version or tool.get("latest_version")
         install_plan = onboarding.installation_plan(component, values, target_version, upgrade=upgrade)
-        emit(install_plan)
+        if args.json:
+            # Keep stdout as one valid JSON document; actions appear in the final report.
+            pass
+        else:
+            print(f"\n{install_plan['action'].capitalize()} {component} {install_plan['version']}")
+            print(f"  Source: {install_plan['source']}")
+            if install_plan["argv"]:
+                print("  Pattyline will run the official package manager after your approval.")
+            else:
+                print("  Install manually using the official source, then rerun setup.")
         consent = bool(args.yes)
         if not consent and sys.stdin.isatty() and install_plan["argv"]:
             human()
@@ -177,18 +213,13 @@ def setup(args):
         login = {"status": "unavailable", "next_step": "install Codex, or run codex login status to diagnose authentication, then rerun pattyline setup"}
 
     result["authentication"] = {"codex_chatgpt": auth["status"], "login": login["status"]}
-    required_tools = all(tools[name]["presence"] == "installed" and tools[name]["update"] != "outdated"
-                         for name in onboarding.SHARED_COMPONENTS)
+    # Updates are optional: an installed older version can still be used after
+    # the user declines the offered upgrade. Missing tools still block readiness.
+    required_tools = all(tools[name]["presence"] == "installed" for name in onboarding.SHARED_COMPONENTS)
     ready = required_tools and auth["status"] == "authenticated"
     result["readiness"] = {"ready": ready, "status": "ready" if ready else "incomplete"}
     if not ready:
         result["readiness"]["next_step"] = login.get("next_step", "install or update the listed tools, then rerun pattyline setup")
-    if not args.json:
-        if ready:
-            print("Setup complete: Pattyline is ready. Git, GitHub CLI, Codex, and ChatGPT sign-in are available.")
-        else:
-            print("Setup incomplete: Pattyline still needs attention.")
-            print(f"Next step: {result['readiness']['next_step']}")
     return result
 
 
@@ -352,7 +383,11 @@ def execute(args):
 def main(argv=None):
     args = parser().parse_args(argv)
     try:
-        emit(execute(args))
+        result = execute(args)
+        if args.command == "setup" and not args.json:
+            print_setup_report(result)
+        else:
+            emit(result)
         return 0
     except (Blocked, tomllib.TOMLDecodeError, ValueError, OSError) as error:
         emit({"error": str(error), "status": "blocked"})
