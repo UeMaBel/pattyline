@@ -13,6 +13,7 @@ from .engine import Engine, plan
 from .git import primary
 from .preparation import Preparation, unfinished
 from .state import State
+from .terminal import Spinner
 from .tickets import adopt, discover, legacy_preview, order, source_candidates
 
 
@@ -145,7 +146,8 @@ def setup(args):
             consent = answer.strip().lower() in {"y", "yes"}
         if consent:
             human()
-            result["actions"].append(onboarding.install(root, install_plan, True))
+            with Spinner(f"Installing {component} {install_plan['version']} (this may take a few minutes)"):
+                result["actions"].append(onboarding.install(root, install_plan, True))
         elif install_plan["argv"]:
             result["actions"].append({"component": component, "status": "declined" if sys.stdin.isatty() else "consent required",
                                       "next_step": f"rerun setup with --install {component} after reviewing the plan"})
