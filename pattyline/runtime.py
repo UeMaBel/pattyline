@@ -39,7 +39,7 @@ class Codex:
             blockers.append(f"Configure runtime.{route}_model and authenticate/prepare it")
         # Preparation only returns drafts and has no tool authority. Codex runs
         # with its own native sign-in; execution/review remain behind this gate.
-        if stage != "preparation":
+        if stage not in {"preparation", "init"}:
             blockers.append("Codex production adapter capability gate blocked: no demonstrated outer boundary protecting credentials, approved inputs, command/network policy and process descendants; CLI sandbox flags alone are insufficient")
         if self.config["permissions"].get("hard_cost_cap"):
             blockers.append("No demonstrated hard monetary-cap enforcement for this runtime")
@@ -49,7 +49,7 @@ class Codex:
         blockers = self.readiness(route, stage)
         if blockers:
             raise Blocked("; ".join(blockers))
-        if stage != "preparation":
+        if stage not in {"preparation", "init"}:
             raise Blocked("Production runtime dispatch remains unavailable until the capability gate is implemented and demonstrated")
         executable = shutil.which(self.config["runtime"]["codex"])
         if not executable:

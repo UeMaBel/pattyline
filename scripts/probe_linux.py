@@ -12,7 +12,7 @@ from pattyline.common import now, write_json
 def main():
     if len(sys.argv) != 2 or not sys.argv[1].startswith("sha256:"):
         raise SystemExit("Supply a locally present immutable Python tool image ID; no images are pulled")
-    modules = ["tests.test_config", "tests.test_broker", "tests.test_process", "tests.test_preparation", "tests.test_release", "tests.test_package",
+    modules = ["tests.test_config", "tests.test_broker", "tests.test_process", "tests.test_initialize", "tests.test_release", "tests.test_package",
                "tests.test_cli.CliTests.test_real_cli_subprocess_help_has_all_required_commands"]
     argv = ["docker", "run", "--rm", "--pull", "never", "--init", "--network", "none", "--read-only", "--cap-drop", "ALL",
             "--security-opt", "no-new-privileges", "--pids-limit", "128", "--memory", "1g", "--user", "1000:1000",

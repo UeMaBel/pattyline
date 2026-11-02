@@ -34,5 +34,5 @@ class PackageTests(unittest.TestCase):
             script = environment / ("Scripts/pattyline.exe" if __import__('os').name == "nt" else "bin/pattyline")
             result = subprocess.run([str(script), "--version"], capture_output=True, text=True, cwd=root, timeout=15)
             self.assertEqual(result.stdout.strip(), "0.1.0")
-            result = subprocess.run([str(executable), "-I", "-c", "from pattyline.preparation import bundle; assert 'grilling' in bundle('interview')"], capture_output=True, text=True, cwd=root, timeout=15)
+                result = subprocess.run([str(executable), "-I", "-c", "from pattyline.initialize import bundle; assert 'grilling' in bundle('interview')"], capture_output=True, text=True, cwd=root, timeout=15)
             self.assertEqual(result.returncode, 0, result.stderr)

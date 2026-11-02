@@ -26,6 +26,8 @@ ENV_TOOL = {"type": "function", "name": "inspect_environment", "description": "R
 
 
 def schema(stage):
+    if stage == "init":
+        stage = "preparation"
     string = {"type": "string"}
     array = {"type": "array", "items": string}
     mapping = {"type": "object", "additionalProperties": string}
@@ -134,7 +136,8 @@ class Broker:
                        "permissions": self.config["permissions"], "route": route, "stage": stage})
 
     def prerequisites(self, route, stage="implementation"):
-        blockers = [] if stage == "preparation" else list(self.sandbox.readiness())
+        is_init = stage in {"preparation", "init"}
+        blockers = [] if is_init else list(self.sandbox.readiness())
         runtime = self.config["runtime"]
         if not runtime.get(f"{route}_model"):
             blockers.append(f"Configure runtime.{route}_model")
@@ -170,7 +173,8 @@ class Broker:
         expires = time.monotonic() + timeout
         cancelled = options.get("cancelled", lambda: False)
         protected = prompt.get("protected_paths", [])
-        authority = "Use inspect_environment for actual environment facts; return drafts as structured artifacts, with no arbitrary code/file authority." if stage == "preparation" else "Use only run_command inside the isolated /workspace. Read-only review must independently assess exact evidence."
+        is_init = stage in {"preparation", "init"}
+        authority = "Use inspect_environment for actual environment facts; return drafts as structured artifacts, with no arbitrary code/file authority." if is_init else "Use only run_command inside the isolated /workspace. Read-only review must independently assess exact evidence."
         history = [{"role": "system", "content": authority + " Return the specified structured result. Never approve tickets or perform Git/GitHub integration."},
                    {"role": "user", "content": canonical(prompt)}]
         transcript, usage, provider_sessions = [], [], []
@@ -219,7 +223,7 @@ class Broker:
                 arguments = call.get("arguments")
                 if not isinstance(arguments, dict):
                     raise CapabilityMismatch("Unknown/malformed broker tool call")
-                if stage == "preparation":
+                if stage in {"preparation", "init"}:
                     if call.get("name") != "inspect_environment" or arguments:
                         raise Blocked("Preparation permits only read-only environment facts and supplied source text; arbitrary code/file authority requires an isolated fact-finding checkout")
                     evidence = inventory(self.config)
@@ -260,7 +264,7 @@ r['credentials_absent']=not any(k in __import__('os').environ for k in ('OPENAI_
 print(json.dumps(r))
 """
             command = {"argv": [self.config["runtime"]["container_python"], "-I", "-c", denial], "timeout": 15, "cwd": "."}
-            if stage == "preparation":
+            if stage in {"preparation", "init"}:
                 evidence = {"outcome": "not-applicable", "reason": "Preparation has only a trusted read-only environment inventory tool, no project-code or filesystem authority"}
             else:
                 evidence = self.sandbox.execute(command, worktree, self.root, ["approved.txt"])
@@ -269,11 +273,11 @@ print(json.dumps(r))
                     raise Blocked("Actual container protected-input/network/credential denial probe failed")
             prompt = {"task": "Use run_command once to inspect approved.txt (read-only), then return a valid result. For implementation, create result.txt with 'capability proof' and list it. For review, approve only when immutable dummy evidence is present, with acceptance_evidence mapping 'Dummy input exists.' to your actual evidence. For preparation return one settled decision and an interview.md artifact.",
                       "protected_paths": ["approved.txt"], "acceptance": ["Dummy input exists."]}
-            if stage == "preparation":
+            if stage in {"preparation", "init"}:
                 prompt["task"] = "Invoke inspect_environment once to establish actual facts; then return one settled decision, no open questions, an interview.md artifact, empty tickets, and verdict approved from the supplied dummy evidence."
             result = self.execute(stage, route, worktree, prompt, timeout=60, _probe=True)
             from .runtime import validate_result
-            if stage != "preparation":
+            if stage not in {"preparation", "init"}:
                 validate_result(result, stage)
                 if not result["tools"]:
                     raise Blocked("Capability probe did not demonstrate actual model tool use")

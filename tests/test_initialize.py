@@ -7,10 +7,10 @@ import uuid
 from pattyline.common import Blocked
 from pattyline.config import DEFAULTS
 from copy import deepcopy
-from pattyline.preparation import Preparation, bundle
+from pattyline.initialize import Initializer, bundle
 
 
-class PreparationRuntime:
+class InitRuntime:
     def __init__(self):
         self.prompts = []
 
@@ -25,20 +25,20 @@ class PreparationRuntime:
                 "artifacts": {artifact: "# Fixture\n\nConfirmed scope.\n"}, "verdict": "approved"}
 
 
-class PreparationTests(unittest.TestCase):
+class InitializeTests(unittest.TestCase):
     def test_slug_normalizes_idea_as_ascii(self):
-        self.assertEqual(Preparation.slug("a moving burger cli animation"), "a-moving-burger-cli-animation")
-        self.assertEqual(Preparation.slug("Crème brûlée"), "creme-brulee")
+        self.assertEqual(Initializer.slug("creme brulee"), "creme-brulee")
+        self.assertEqual(Initializer.slug("CrÃ¨me brÃ»lÃ©e"), "creme-brulee")
 
     def test_fresh_stage_handoffs_survive_resume_and_review_is_optional(self):
         with tempfile.TemporaryDirectory() as directory:
-            runtime = PreparationRuntime()
-            preparation = Preparation(directory, DEFAULTS, "feature", runtime)
+            runtime = InitRuntime()
+            preparation = Initializer(directory, DEFAULTS, "feature", runtime)
             preparation.answer("I want a CLI")
             preparation.advance()
             self.assertEqual(preparation.value["stage"], "interview")
             preparation.advance(confirm=True)
-            preparation = Preparation(directory, DEFAULTS, "feature", runtime)
+            preparation = Initializer(directory, DEFAULTS, "feature", runtime)
             preparation.advance()
             self.assertEqual(preparation.value["stage"], "breakdown")
             preparation.advance()
@@ -56,22 +56,22 @@ class PreparationTests(unittest.TestCase):
 
     def test_open_questions_cannot_be_summarized_away_by_confirmation(self):
         with tempfile.TemporaryDirectory() as directory:
-            preparation = Preparation(directory, DEFAULTS, "feature", PreparationRuntime())
+            preparation = Initializer(directory, DEFAULTS, "feature", InitRuntime())
             preparation.value["decisions"] = ["Build a CLI"]
             preparation.value["open_questions"] = ["Which platform?"]
             preparation.save()
             with self.assertRaisesRegex(Blocked, "Resolve open"):
                 preparation.advance(confirm=True)
-            restored = Preparation(directory, DEFAULTS, "feature")
+            restored = Initializer(directory, DEFAULTS, "feature")
             self.assertEqual(restored.value["open_questions"], ["Which platform?"])
 
     def test_production_preparation_preserves_human_input_when_blocked(self):
         with tempfile.TemporaryDirectory() as directory:
-            preparation = Preparation(directory, DEFAULTS, "feature")
+            preparation = Initializer(directory, DEFAULTS, "feature")
             preparation.answer("Important decision")
             with self.assertRaisesRegex(Blocked, "Preparation saved"):
                 preparation.advance()
-            restored = Preparation(directory, DEFAULTS, "feature")
+            restored = Initializer(directory, DEFAULTS, "feature")
             self.assertEqual(restored.value["messages"][0]["text"], "Important decision")
 
     def test_complete_owned_resources_and_license_are_bundled(self):
@@ -89,7 +89,7 @@ class PreparationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             values = deepcopy(DEFAULTS)
             values["checks"] = {"unit": {"argv": ["test-command"], "cwd": ".", "timeout": 10}}
-            preparation = Preparation(directory, values, "feature", PreparationRuntime())
+            preparation = Initializer(directory, values, "feature", InitRuntime())
             preparation.value.update({"stage": "approval", "breakdown_approved": True, "review_choice": "no", "proposed_tickets": [{"number": "01", "title": "Observable outcome", "outcome": "Write output", "route": "local", "dependencies": [], "scope": ["app/*"], "verification": [{"name": "unit", "phase": "introduced"}], "acceptance": ["Output exists."], "cloud_escalation_allowed": False}]})
             (preparation.directory / "spec.md").write_text("# Specification\n\nBuild the output.")
             result = preparation.publish()

@@ -11,7 +11,7 @@ from .cleanup import clean
 from .common import Blocked, canonical
 from .engine import Engine, plan
 from .git import primary
-from .preparation import Preparation, unfinished
+from .initialize import Initializer, unfinished
 from .state import State
 from .terminal import Spinner
 from .tickets import adopt, discover, legacy_preview, order, source_candidates
@@ -368,8 +368,8 @@ def initialize_project(args):
         if not args.idea:
             raise Blocked("An idea is required to start init")
     if not feature:
-        feature = Preparation.slug(args.idea)
-    preparation = Preparation(root, values, feature)
+        feature = Initializer.slug(args.idea)
+    preparation = Initializer(root, values, feature)
     if args.idea:
         preparation.answer(args.idea)
     if args.preparation_review:
@@ -437,7 +437,7 @@ def execute(args):
                 feature = choices[0]
             else:
                 raise Blocked("Select a feature slug; unfinished features: " + ", ".join(choices))
-        preparation = Preparation(root, values, feature)
+        preparation = Initializer(root, values, feature)
         if args.answer:
             preparation.answer(args.answer)
         if args.preparation_review:

@@ -24,7 +24,7 @@ def bundle(stage):
     return result
 
 
-class Preparation:
+class Initializer:
     @staticmethod
     def slug(idea):
         value = unicodedata.normalize("NFKD", idea).encode("ascii", "ignore").decode("ascii").lower()
@@ -107,7 +107,7 @@ class Preparation:
             return self.save()
         if stage == "approval":
             return self.save()
-        blockers = self.runtime.readiness("cloud", "preparation")
+        blockers = self.runtime.readiness("cloud", "init")
         if blockers:
             self.save()
             raise Blocked("Preparation saved; cloud session unavailable: " + "; ".join(blockers))
@@ -117,7 +117,7 @@ class Preparation:
                   "handoff": (self.directory / "handoff.md").read_text(encoding="utf-8"), "skills": bundle(stage),
                   "source_documents": {p.name: p.read_text(encoding="utf-8") for p in self.directory.glob("*.md")},
                   "project_instructions": {p: within(self.root, p).read_text(encoding="utf-8") for p in sorted({*self.config["instructions"], "AGENTS.md", "GLOSSARY.md"}) if within(self.root, p).is_file()}}
-        response = self.runtime.execute("preparation", "cloud", self.directory, prompt, timeout=1800)
+        response = self.runtime.execute("init", "cloud", self.directory, prompt, timeout=1800)
         returned = response.get("session")
         if not returned or any(s["session"] == returned for s in self.value["sessions"]):
             raise Blocked("Fresh preparation session identity required at every handoff")

@@ -18,7 +18,7 @@ CHECKS = {
     "foundation": ["tests.test_config", "tests.test_cli", "tests.test_package"],
     "tracker": ["tests.test_tickets"], "approval": ["tests.test_tickets"], "adoption": ["tests.test_tickets"],
     "cloud-onboarding": ["tests.test_onboarding"], "local-onboarding": ["tests.test_onboarding"],
-    "preparation": ["tests.test_preparation"], "workbench": ["tests.test_state", "tests.test_engine"],
+    "preparation": ["tests.test_initialize"], "workbench": ["tests.test_state", "tests.test_engine"],
     "workers": ["tests.test_broker"], "review": ["tests.test_engine"],
     "local-worker": ["tests.test_broker"], "escalation": ["tests.test_engine"],
     "github": ["tests.test_github"], "scheduler": ["tests.test_engine"],
