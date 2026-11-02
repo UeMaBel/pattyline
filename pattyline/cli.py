@@ -112,6 +112,8 @@ def setup(args):
            /=================\
            |#################|
             \_______________/""")
+        print("Welcome to Pattyline! Setup is checking Git, GitHub CLI, Codex, and your Codex sign-in.")
+        print("It will show any missing or outdated tools and guide you through the next steps.")
     settings_path = config.global_path()
     root = settings_path.parent
     created = not settings_path.exists()
