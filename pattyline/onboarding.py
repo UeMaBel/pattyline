@@ -1,5 +1,6 @@
 """Dependency inventory and consented installation plans; never install on import."""
 import json
+from functools import lru_cache
 import os
 from pathlib import Path
 import platform
@@ -25,7 +26,7 @@ SOURCES = {
 WINGET = {"git": "Git.Git", "gh": "GitHub.cli", "ollama": "Ollama.Ollama"}
 SHARED_COMPONENTS = ("git", "gh", "codex")
 VERSION_SOURCES = {
-    "git": "https://git-scm.com/downloads",
+    "git": "https://git-scm.com/install/windows",
     "gh": "https://api.github.com/repos/cli/cli/releases/latest",
     "codex": "https://registry.npmjs.org/@openai%2fcodex/latest",
 }
@@ -42,6 +43,7 @@ def executable(name, configured=None):
     return None
 
 
+@lru_cache(maxsize=3)
 def latest_version(component):
     """Read a version from the tool publisher's public release metadata."""
     if component not in VERSION_SOURCES:
@@ -207,7 +209,11 @@ def installation_plan(component, config, version=None, upgrade=False):
         version = normalized_version(config["runtime"].get("version"))
     command = None
     privilege = "manual installation; consult the official instructions for platform-specific privileges"
-    if component == "codex" and version and shutil.which("npm"):
+    if component == "git" and os.name == "nt" and version and shutil.which("winget"):
+        verb = "upgrade" if installed else "install"
+        command = ["winget", verb, "--id", WINGET[component], "--exact", "--version", version, "--source", "winget"]
+        privilege = "winget may request elevation; Pattyline does not elevate automatically"
+    elif component == "codex" and version and shutil.which("npm"):
         command = [shutil.which("npm"), "install", "--global", f"@openai/codex@{version}"]
         privilege = "npm may require write access to its global package directory"
     elif component == "gh" and os.name == "nt" and version and shutil.which("winget"):
