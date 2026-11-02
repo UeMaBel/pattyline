@@ -1,5 +1,6 @@
 """Dependency inventory and consented installation plans; never install on import."""
 import json
+from functools import lru_cache
 import os
 from pathlib import Path
 import platform
@@ -23,6 +24,12 @@ SOURCES = {
     "docker": "https://docs.docker.com/get-started/get-docker/",
 }
 WINGET = {"git": "Git.Git", "gh": "GitHub.cli", "ollama": "Ollama.Ollama"}
+SHARED_COMPONENTS = ("git", "gh", "codex")
+VERSION_SOURCES = {
+    "git": "https://git-scm.com/install/windows",
+    "gh": "https://api.github.com/repos/cli/cli/releases/latest",
+    "codex": "https://registry.npmjs.org/@openai%2fcodex/latest",
+}
 
 
 def executable(name, configured=None):
@@ -36,7 +43,101 @@ def executable(name, configured=None):
     return None
 
 
+@lru_cache(maxsize=3)
+def latest_version(component):
+    """Read a version from the tool publisher's public release metadata."""
+    if component not in VERSION_SOURCES:
+        return None
+    request = urllib.request.Request(VERSION_SOURCES[component], headers={"User-Agent": "Pattyline setup"})
+    try:
+        with urllib.request.urlopen(request, timeout=3) as response:
+            content = response.read(256 * 1024).decode("utf-8", errors="replace")
+        if component == "gh":
+            version = json.loads(content).get("tag_name", "")
+        elif component == "codex":
+            version = json.loads(content).get("version", "")
+        else:
+            match = re.search(r"Latest version:\s*([0-9]+(?:\.[0-9]+)+)", content, re.I)
+            version = match.group(1) if match else ""
+        return normalized_version(version)
+    except (OSError, TimeoutError, ValueError, urllib.error.URLError):
+        return None
+
+
+def normalized_version(value):
+    match = re.search(r"(?<![0-9])v?([0-9]+(?:\.[0-9]+)+)", str(value or ""), re.I)
+    return match.group(1) if match else None
+
+
+def version_key(value):
+    version = normalized_version(value)
+    return tuple(int(part) for part in version.split(".")) + (0,) * (4 - len(version.split("."))) if version else None
+
+
+def tool_inventory(config, components=SHARED_COMPONENTS):
+    tools = {}
+    for name in components:
+        configured = config["runtime"].get(name)
+        path = executable(name, configured)
+        version = None
+        if path:
+            try:
+                completed = subprocess.run([path, "--version"], capture_output=True, text=True, timeout=10)
+                version = (completed.stdout or completed.stderr).strip()[:300]
+            except (OSError, subprocess.TimeoutExpired):
+                version = "version query unavailable"
+        available = latest_version(name)
+        current_key, available_key = version_key(version), version_key(available)
+        outdated = bool(path and current_key and available_key and current_key < available_key)
+        tools[name] = {"path": path, "version": version, "latest_version": available, "source": SOURCES[name],
+                       "presence": "installed" if path else "missing",
+                       "update": "outdated" if outdated else "current" if path and available else "unknown" if path else "not-installed",
+                       "authentication": "not checked", "capability": "not demonstrated"}
+    return {"platform": platform.platform(), "tools": tools}
+
+
+def codex_auth_status(config):
+    """Ask Codex whether its own credential store has a ChatGPT session.
+
+    Never read Codex's credential/config files; their contents remain owned by Codex.
+    """
+    path = executable("codex", config["runtime"].get("codex"))
+    if not path:
+        return {"status": "codex-missing"}
+    try:
+        completed = subprocess.run([path, "login", "status"], capture_output=True, text=True, timeout=15)
+    except (OSError, subprocess.TimeoutExpired):
+        return {"status": "unknown"}
+    # Codex currently reports this status on stderr. Do not return or persist raw
+    # output; it is only used to distinguish ChatGPT from other login methods.
+    message = (completed.stdout + "\n" + completed.stderr).casefold()
+    if completed.returncode == 0 and "logged in using chatgpt" in message:
+        return {"status": "authenticated"}
+    if "not logged in" in message:
+        return {"status": "not-authenticated"}
+    if completed.returncode == 0 and "logged in using" in message:
+        return {"status": "other-authentication"}
+    return {"status": "unknown"}
+
+
+def codex_login(config, cwd):
+    """Start Codex's native interactive login and return only its outcome."""
+    path = executable("codex", config["runtime"].get("codex"))
+    if not path:
+        return {"status": "codex-missing"}
+    try:
+        completed = subprocess.run([path, "login"], cwd=cwd, timeout=600, check=False)
+    except subprocess.TimeoutExpired:
+        return {"status": "incomplete"}
+    except KeyboardInterrupt:
+        return {"status": "interrupted"}
+    except OSError:
+        return {"status": "failed"}
+    return {"status": "completed" if completed.returncode == 0 else "failed"}
+
+
 def inventory(config):
+    """Full runtime inventory retained for worker probes; setup uses tool_inventory."""
     tools = {}
     for name in SOURCES:
         configured = config["runtime"].get(name)
@@ -87,44 +188,44 @@ def hardware():
     return {"ram": memory or "unknown", "gpu": gpu, "model_fit": "not demonstrated; confirm publisher weights, context/KV cache requirements and actual tool probe before recommending/downloading"}
 
 
-def installation_plan(component, config, version=None):
-    if component not in SOURCES:
-        raise Blocked(f"Unknown component {component}")
+def _installed_version(path):
+    if not path:
+        return None
+    try:
+        completed = subprocess.run([path, "--version"], capture_output=True, text=True, timeout=10)
+        return (completed.stdout or completed.stderr).strip()[:300]
+    except (OSError, subprocess.TimeoutExpired):
+        return "version query unavailable"
+
+
+def installation_plan(component, config, version=None, upgrade=False):
+    if component not in SHARED_COMPONENTS:
+        raise Blocked(f"Unsupported shared tool {component}; choose git, gh, or codex")
     installed = executable(component, config["runtime"].get(component))
-    if installed:
-        raise Blocked(f"{component} already installed at {installed}; no automatic replacement/upgrades")
-    version = version or (config["runtime"]["version"] if component == "codex" else None)
+    if installed and not upgrade:
+        raise Blocked(f"{component} already installed at {installed}; compatible tools are reused")
+    version = normalized_version(version) or latest_version(component)
+    if not version and component == "codex":
+        version = normalized_version(config["runtime"].get("version"))
     command = None
-    privilege = "manual install; source documents privileges"
-    destination = "installer-managed; inspect installer before consenting"
-    if os.name == "nt" and component in WINGET and version and shutil.which("winget"):
-        command = ["winget", "install", "--id", WINGET[component], "--exact", "--version", version, "--source", "winget"]
-        privilege = "installer may require elevation; Pattyline does not elevate automatically"
-    elif os.name != "nt" and component in {"git", "gh", "docker"} and version and shutil.which("apt-get") and shutil.which("apt-cache"):
-        package = "docker.io" if component == "docker" else component
-        policy = subprocess.run(["apt-cache", "policy", package], capture_output=True, text=True, timeout=10)
-        if policy.returncode == 0 and re.search(r"^\s*(?:\*\*\*\s+)?" + re.escape(version) + r"\s+\d+\s*$", policy.stdout, re.M):
-            command = ["apt-get", "install", "--yes", f"{package}={version}"]
-            if os.geteuid() != 0:
-                if shutil.which("sudo"):
-                    command = ["sudo", "--non-interactive", *command]
-                else:
-                    command = None
-            privilege = "root required for this step only; sudo must already be authorized or the human must run the plan manually"
-            destination = "system package-manager paths"
-            source_urls = re.findall(r"^\s+\d+\s+(https?://\S+)", policy.stdout, re.M)
-            safe_urls = []
-            for url in source_urls:
-                parsed = urllib.parse.urlsplit(url)
-                safe_urls.append(urllib.parse.urlunsplit((parsed.scheme, parsed.hostname or "", parsed.path, "", "")))
-            source = ", ".join(safe_urls) or "configured local apt package index; inspect apt-cache policy before consent"
-        else:
-            source = SOURCES[component]
-    else:
-        source = SOURCES[component]
-    return {"component": component, "version": version or "unspecified: choose compatible pinned version",
-            "source": source if os.name != "nt" else SOURCES[component], "destination": destination, "privileges": privilege,
-            "argv": command, "status": "consent required"}
+    privilege = "manual installation; consult the official instructions for platform-specific privileges"
+    if component == "git" and os.name == "nt" and version and shutil.which("winget"):
+        verb = "upgrade" if installed else "install"
+        command = ["winget", verb, "--id", WINGET[component], "--exact", "--version", version, "--source", "winget"]
+        privilege = "winget may request elevation; Pattyline does not elevate automatically"
+    elif component == "codex" and version and shutil.which("npm"):
+        command = [shutil.which("npm"), "install", "--global", f"@openai/codex@{version}"]
+        privilege = "npm may require write access to its global package directory"
+    elif component == "gh" and os.name == "nt" and version and shutil.which("winget"):
+        verb = "upgrade" if installed else "install"
+        command = ["winget", verb, "--id", WINGET[component], "--exact", "--version", version, "--source", "winget"]
+        privilege = "winget may request elevation; Pattyline does not elevate automatically"
+    return {"component": component, "action": "upgrade" if installed else "install",
+            "installed_version": _installed_version(installed),
+            "version": version or "unavailable; select a version from the official source",
+            "source": SOURCES[component], "destination": "managed by the selected official installer",
+            "privileges": privilege, "argv": command,
+            "status": "consent required" if command else "manual installation required"}
 
 
 def install(root, plan, consent=False):
@@ -133,18 +234,25 @@ def install(root, plan, consent=False):
     if not plan["argv"]:
         raise Blocked(f"Manual installation needed: {plan['source']}; no verified unattended installer for this component/platform/version")
     record = {"time": now(), "plan": plan, "state": "installing"}
-    path = Path(root) / ".pattyline/evidence" / f"install-{plan['component']}.json"
-    write_json(path, record)
     try:
         result = run(plan["argv"], root, 900)
         record.update({"state": "installed-needs-validation" if result["exit_code"] == 0 else "interrupted-or-failed",
                        "exit_code": result["exit_code"], "outcome": result["outcome"]})
-        write_json(path, record)
         if result["exit_code"]:
-            raise Blocked("Installation failed/interrupted; inspect installation and rerun setup inventory")
+            raise Blocked("Installation incomplete (failed or interrupted); inspect the tool and rerun setup inventory")
+        found = executable(plan["component"])
+        if not found:
+            record["state"] = "incomplete"
+            raise Blocked("Installer exited successfully, but the tool is not available on PATH; setup remains incomplete")
+        installed_version = _installed_version(found)
+        target_version = normalized_version(plan.get("version"))
+        actual_version = normalized_version(installed_version)
+        if not target_version or not actual_version or actual_version != target_version:
+            record.update({"state": "installed-needs-validation", "path": found, "version": installed_version})
+            return record
+        record.update({"state": "installed", "path": found, "version": installed_version})
     except BaseException:
         record["state"] = "interrupted-or-failed"
-        write_json(path, record)
         raise
     return record
 
