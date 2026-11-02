@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from pattyline.common import Blocked
 from pattyline.config import DEFAULTS
-from pattyline.onboarding import installation_plan, install, model_plan, download_model, local_inventory, ollama_api, tool_inventory
+from pattyline.onboarding import installation_plan, install, model_plan, download_model, local_inventory, ollama_api, tool_inventory, latest_version
 from pattyline.cli import main
 
 
@@ -95,6 +95,41 @@ class OnboardingTests(unittest.TestCase):
         self.assertIsNone(plan["argv"])
         self.assertEqual(plan["version"], "2.56.0")
         self.assertEqual(plan["source"], "https://git-scm.com/downloads")
+
+    def test_git_latest_version_parses_official_install_page(self):
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def read(self, size):
+                return b"<h2>Latest version: 2.56.0 (Release Notes)</h2>"
+
+        latest_version.cache_clear()
+        with patch("pattyline.onboarding.urllib.request.urlopen", return_value=Response()) as open_url:
+            self.assertEqual(latest_version("git"), "2.56.0")
+        self.assertEqual(open_url.call_args.args[0].full_url, "https://git-scm.com/install/windows")
+        latest_version.cache_clear()
+
+    def test_windows_git_winget_install_and_upgrade_are_pinned(self):
+        with patch("pattyline.onboarding.os.name", "nt"), \
+             patch("pattyline.onboarding.executable", return_value=None), \
+             patch("pattyline.onboarding.latest_version", return_value="2.56.0"), \
+             patch("pattyline.onboarding.shutil.which", return_value="winget"):
+            install_plan = installation_plan("git", DEFAULTS)
+        self.assertEqual(install_plan["argv"], ["winget", "install", "--id", "Git.Git", "--exact",
+                                                "--version", "2.56.0", "--source", "winget"])
+
+        with patch("pattyline.onboarding.os.name", "nt"), \
+             patch("pattyline.onboarding.executable", return_value="C:/Git/cmd/git.exe"), \
+             patch("pattyline.onboarding._installed_version", return_value="git version 2.50.0.windows.1"), \
+             patch("pattyline.onboarding.latest_version", return_value="2.56.0"), \
+             patch("pattyline.onboarding.shutil.which", return_value="winget"):
+            upgrade_plan = installation_plan("git", DEFAULTS, upgrade=True)
+        self.assertEqual(upgrade_plan["argv"], ["winget", "upgrade", "--id", "Git.Git", "--exact",
+                                                "--version", "2.56.0", "--source", "winget"])
 
     def test_failed_installation_is_incomplete_and_writes_no_project_evidence(self):
         plan = {"component": "codex", "action": "install", "argv": ["fake-installer"], "source": "official"}
